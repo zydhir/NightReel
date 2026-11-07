@@ -94,3 +94,14 @@ html[data-hero="compact"] .hero{height:min(62vh,580px);min-height:420px}
 html[data-hero="off"] .hero{display:none}html[data-hero="off"] #app:has(>.hero){padding-top:calc(86px + env(safe-area-inset-top,0px))}html[data-hero="off"] .cstrip{margin-top:16px}
 /* spacing */
 html[data-dens="compact"] .row{margin:20px 0}html[data-dens="compact"] .sc{gap:8px;padding-top:18px;padding-bottom:30px}html[data-dens="compact"] .gr{gap:12px 10px}html[data-dens="compact"] .pgrid{gap:10px}
+
+/* Embedded-player shell: keep the chooser above, not on top of, player controls. */
+#pl::before{display:none}
+#pl.o{display:flex;flex-direction:column;background:#09080f}
+.player-bar{position:relative;flex:none;min-height:78px;padding:calc(12px + env(safe-area-inset-top,0px)) 4vw 12px;display:flex;align-items:center;gap:14px;background:rgba(23,20,31,.98);border-bottom:1px solid var(--gb)}
+.player-close{flex:none;width:42px;height:42px;border-radius:50%;border:1px solid var(--gb);background:var(--g);font-size:18px}
+.player-title{display:flex;flex-direction:column;min-width:0;max-width:25%;line-height:1.3}.player-title b,.player-title span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.player-title span{font-size:12px;color:var(--mu)}
+.player-chooser{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;border:1px solid var(--gb);border-radius:999px;background:var(--g)}
+.player-chooser button{border:0;border-radius:999px;background:transparent;color:var(--mu);font-weight:700;padding:9px 18px;white-space:nowrap}.player-chooser button[aria-pressed="true"]{background:linear-gradient(90deg,var(--a),var(--b));color:#fff}
+.player-stage{flex:1;min-height:0;background:#000}.player-stage iframe{display:block;width:100%;height:100%;border:0}.player-notice{flex:none;padding:8px 4vw;color:var(--tx);background:var(--s);font-size:13px;text-align:center}
+@media(max-width:650px){.player-bar{min-height:112px;align-items:flex-start;padding-bottom:57px}.player-title{max-width:calc(100% - 60px)}.player-chooser{top:auto;bottom:8px}.player-chooser button{padding:6px 16px}}
