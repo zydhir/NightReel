@@ -1,0 +1,9 @@
+# Only the website goes to GitHub/Netlify. Everything else in this folder stays local
+# (admin-setup.sql has your email, the launcher scripts are for this PC, pocketbase is Copilot's).
+/*
+!/index.html
+!/css/
+!/js/
+!/README.md
+!/netlify.toml
+!/.gitignore

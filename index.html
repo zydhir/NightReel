@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nightreel · Find tonight’s watch</title>
+<meta name="description" content="Discover trending movies, series and anime, see where to stream them, watch trailers and keep your own list.">
+<meta name="theme-color" content="#07070B">
+<meta property="og:title" content="Nightreel">
+<meta property="og:description" content="Discover trending movies, series and anime, see where to stream them and keep your own list.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%238B7BFF'/%3E%3Cstop offset='1' stop-color='%23FF7AA8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='64' height='64' rx='15' fill='%2309080F'/%3E%3Cpath d='M18 46V18h6l16 18V18h6v28h-6L24 28v18z' fill='url(%23g)'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://image.tmdb.org" crossorigin><link rel="preconnect" href="https://api.themoviedb.org" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4"></script>
+<!-- Styles load in this order; later files override earlier ones. -->
+<link rel="stylesheet" href="css/base.css"><!-- Base layout: nav, hero, rows, cards, modal, player, profile -->
+<link rel="stylesheet" href="css/auth-lists.css"><!-- Sign-in page, settings bits, My List, availability -->
+<link rel="stylesheet" href="css/motion.css"><!-- Splash, page transitions, quick-add, palette, stats bars -->
+<link rel="stylesheet" href="css/design.css"><!-- Cinematic design layer: typography, nav, hero, footer, stats page -->
+<link rel="stylesheet" href="css/glass.css"><!-- iOS liquid-glass look, hover cards, Top 10, notifications, tab bar, info pages -->
+<link rel="stylesheet" href="css/appearance.css"><!-- Performance overrides, glass dropdowns, Appearance options (themes, fonts, sizes) -->
+<link rel="stylesheet" href="css/icons.css"><!-- Icon sizing and check marks -->
+<link rel="stylesheet" href="css/admin.css"><!-- Admin panel and announcement banner -->
+</head>
+<body>
+<div id="splash" aria-hidden="true"><div class="lg">night<i>reel</i></div><div class="bar"></div></div>
+<!--
+  Nightreel - single-file streaming front-end. Auth powered by Supabase.
+  Finish setup in your Supabase dashboard:
+  1) IMPORTANT - the free-tier built-in emailer sends only ~2 emails per hour. With "Confirm email"
+     ON (default), every signup sends one - once you hit the cap, signups fail with
+     "email rate limit exceeded" for up to an hour. While testing: Authentication -> Sign In / Up
+     -> turn "Confirm email" OFF, and email+password accounts are created instantly.
+     For production: connect a real SMTP (Resend/Postmark) under Authentication -> SMTP.
+  2) Social login: enable Google and Discord under Authentication -> Providers and configure
+     their client IDs and secrets in Supabase. Set the redirect/callback URL in BOTH provider
+     dashboards to: https://pgvtdnpblfiaptsjtixr.supabase.co/auth/v1/callback
+     Do not put provider secrets in this HTML. Removing Apple here does not disable it in Supabase.
+  3) Authentication -> URL Configuration: add this page's URL to "Site URL" and "Redirect URLs".
+     Google/Apple sign-in needs the page hosted over http(s) (GitHub Pages / Netlify / Vercel, or
+     `python3 -m http.server` for local testing). Opening the file straight from disk won't finish OAuth.
+  4) Recommended - cloud sync of your list/history/notes: SQL Editor -> run:
+       create table if not exists app_state (
+         user_id uuid primary key references auth.users on delete cascade,
+         data jsonb not null default '{}'::jsonb,
+         updated_at timestamptz not null default now());
+       alter table app_state enable row level security;
+       create policy "own state" on app_state for all
+         using (auth.uid() = user_id) with check (auth.uid() = user_id);
+     Until then everything works - data just stays in this browser.
+-->
+<nav id="nav"><button class="hb" id="hb" aria-label="Open menu" aria-expanded="false"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+  <a class="logo" href="#home">night<i>reel</i></a>
+  <div class="nl" id="nl"><a href="#home">Home</a><a href="#movies">Movies</a><a href="#series">Series</a><a href="#anime">Anime</a><a href="#soon">Coming soon</a><a href="#list">My List</a><a href="#stats">Stats</a></div>
+  <div class="sp"></div>
+  <div class="sb"><span aria-hidden="true" class="sbi"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span><input id="q" type="search" placeholder="Search  ( / )" aria-label="Search titles" autocomplete="off"><div class="rsd" id="rsd"></div></div>
+  <button class="pf rnd" data-a="rnd" aria-label="Discover something random" title="Surprise me"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/></svg></button>
+  <button class="pf" id="pf" aria-label="Account">?</button>
+</nav>
+<div class="drw" id="drw"><div class="dp"><a class="logo" href="#home" style="padding:0 16px 14px">night<i>reel</i></a><a href="#home">Home</a><a href="#movies">Movies</a><a href="#series">Series</a><a href="#anime">Anime</a><a href="#soon">Coming soon</a><a href="#list">My List</a><a href="#stats">Your stats</a><button data-a="rnd"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.3" fill="currentColor" stroke="none"/><circle cx="15.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/></svg> Surprise me</button><a href="#history">History</a><a href="#profile">Profile</a></div></div>
+<div class="menu" id="menu"></div>
+<main id="app"></main>
+<footer><div class="ft"><a class="logo" href="#home">night<i>reel</i></a><p>Find tonight’s watch: trending films, series and anime, with your list, ratings and stats in one place.</p></div><div class="fcol"><b>Browse</b><a href="#movies">Movies</a><a href="#series">Series</a><a href="#anime">Anime</a><a href="#soon">Coming soon</a></div><div class="fcol"><b>You</b><a href="#list">My List</a><a href="#stats">Your stats</a><a href="#history">History</a><a href="#profile">Settings</a></div><div class="fcol"><b>Info</b><a href="#about">About</a><a href="#privacy">Privacy</a><a href="#terms">Terms</a><a href="#dmca">DMCA</a><a href="#contact">Contact</a></div><small class="fnote">This product uses the TMDB API but is not endorsed or certified by TMDB. Nightreel doesn’t stream movies or shows: use <b>Where to watch</b> on any title to find a licensed service. Press <kbd>?</kbd> for keyboard shortcuts.</small></footer>
+<div class="ovl" id="md"></div>
+<div class="ovl" id="au"></div>
+<div id="pl">
+  <video id="vid" playsinline hidden></video>
+  <div class="scn" id="scn"></div>
+  <div class="pt"><button class="x" style="position:static" id="pcl" aria-label="Close player"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M18 6 6 18M6 6l12 12"/></svg></button><div class="ttl"><b id="pti"></b><span id="pep"></span></div><span class="pn2" id="pn2"></span></div>
+  <div class="pc"><input type="range" id="rg" min="0" value="0" step="1" aria-label="Seek"><div class="pr"><button id="ppb" aria-label="Play or pause" data-s="pause"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="6" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/><rect x="14" y="4.5" width="4" height="15" rx="1" fill="currentColor" stroke="none"/></svg></button><button id="b10" aria-label="Back 10 seconds"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5"/><path d="M4 4v4.5h4.5"/><text x="12.6" y="15.6" text-anchor="middle" font-size="7.5" font-weight="700" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">10</text></svg></button><button id="f10" aria-label="Forward 10 seconds"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 12a8 8 0 1 1-2.4-5.7L20 8.5"/><path d="M20 4v4.5h-4.5"/><text x="11.4" y="15.6" text-anchor="middle" font-size="7.5" font-weight="700" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">10</text></svg></button><span id="tm"></span><span class="sp"></span><button id="nx">Next <svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5 5v14l10-7z" fill="currentColor"/><path d="M19 5v14"/></svg></button><button id="fs" aria-label="Fullscreen"><svg class="nri" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button></div></div>
+</div>
+<div id="toast"></div>
+<input type="file" id="avf" accept="image/*" hidden>
+<!-- Scripts must stay in this order: later files build on the ones above them. -->
+<script src="js/icons.js"></script><!-- SVG icon set used everywhere -->
+<script src="js/core.js"></script><!-- Helpers, storage, TMDB requests, title catalog, artwork -->
+<script src="js/accounts.js"></script><!-- Supabase sign-in, cloud sync, settings page, account menu -->
+<script src="js/views.js"></script><!-- Cards, rows, My List page, home hero markup -->
+<script src="js/info-pages.js"></script><!-- About, Privacy, Terms, DMCA and Contact pages (set CONTACT_EMAIL here) -->
+<script src="js/pages.js"></script><!-- Router (render), history, coming soon, people, browse grids, hero rotation -->
+<script src="js/detail.js"></script><!-- Title detail popup, seasons and episodes, where to watch -->
+<script src="js/player.js"></script><!-- Video player (not linked from the UI; kept for licensed sources you may add later) -->
+<script src="js/events.js"></script><!-- Click and keyboard handlers, data loading, start-up -->
+<script src="js/effects.js"></script><!-- Splash, scroll effects, quick add, command palette, Tonight’s pick -->
+<script src="js/stats-search.js"></script><!-- Stats page, new episodes, search filters, title links, player keys -->
+<script src="js/appearance-ui.js"></script><!-- Appearance settings, glass dropdowns, hover cards, Top 10, notifications, player extras, tab bar -->
+<script src="js/admin.js"></script><!-- Admin panel (#admin) and announcement banner; access is enforced by Supabase, see admin-setup.sql -->
+</body>
+</html>
