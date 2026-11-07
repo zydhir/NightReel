@@ -95,28 +95,7 @@ D.addEventListener('click',e=>{if(!e.target.closest('#ntf,.v4bell'))ntf.classLis
 // ---- Play Something ----
 function playSomething(){const u=me();let pool=u?pick(u):[];if(pool.length<4)pool=C.filter(c=>c&&c.p);
   if(!pool.length)return toast('Titles are still loading','err');const c=pool[Math.random()*pool.length|0];toast('Playing something: '+c.t,'ok');play(c.i)}
-// ---- player extras: speed, episodes, picture-in-picture, skip intro, next-episode countdown ----
-const pl=$('#pl'),pr=pl.querySelector('.pr');
-pr.querySelector('#nx').insertAdjacentHTML('beforebegin','<button id="v4spd" class="v4pb" aria-label="Playback speed" title="Speed">1×</button><button id="v4eps" aria-label="Episodes" title="Episodes">'+I('list')+'</button><button id="v4pip" aria-label="Picture in picture" title="Picture in picture">'+I('pip')+'</button>');
-pl.insertAdjacentHTML('beforeend','<button id="v4skip" hidden>Skip Intro '+I('skip')+'</button><div id="v4next" hidden><span>Next episode in <b>20</b>s</span><button>'+I('play')+' Play now</button></div><div id="psheet" hidden></div>');
-function sheet(kind,force){const sh=$('#psheet');if(!P)return;if(!force&&sh.dataset.k===kind&&!sh.hidden){sh.hidden=true;return}sh.dataset.k=kind;sh.hidden=false;const c=P.c;let h='';
-  if(kind==='spd')h='<h4>Playback speed</h4>'+[0.5,0.75,1,1.25,1.5,2].map(v=>`<button class="po${(P.rate||1)===v?' on':''}" data-ps="spd" data-v="${v}">${v===1?'1× (Normal)':v+'×'}</button>`).join('');
-  else{const ss=c.seasons&&c.seasons.length?c.seasons:[{n:1,ec:c.ep}];let g=0;
-    h='<h4>Episodes · '+esc(c.t)+'</h4>'+ss.map(s=>{const st=g;g+=s.ec;return `<p class="setlb">Season ${s.n}</p><div class="epsg">${Array.from({length:Math.min(s.ec,100)},(_,k)=>`<button class="${st+k+1===P.ep?'on':''}" data-ps="ep" data-v="${st+k+1}" aria-label="Season ${s.n} episode ${k+1}">${k+1}</button>`).join('')}</div>`}).join('')}
-  sh.innerHTML=h;pwake()}
-$('#v4spd').onclick=()=>sheet('spd');$('#v4eps').onclick=()=>sheet('eps');
-$('#v4pip').onclick=()=>{const v=$('#vid');if(D.pictureInPictureElement)D.exitPictureInPicture();else if(v.requestPictureInPicture)v.requestPictureInPicture().catch(()=>toast('Picture-in-picture is not available here','err'))};
-$('#psheet').onclick=e=>{const b=e.target.closest('[data-ps]');if(!b||!P)return;const k=b.dataset.ps,v=b.dataset.v;
-  if(k==='spd'){P.rate=+v;if(P.url)$('#vid').playbackRate=P.rate;sheet('spd',1);toast('Speed '+v+'×')}else if(k==='ep'){$('#psheet').hidden=true;play(P.c.i,+v)}};
-$('#v4skip').onclick=()=>{if(!P)return;if(P.url)$('#vid').currentTime=90;else P.t=90;pwake()};
-$('#v4next').querySelector('button').onclick=()=>pnext();
-const _play=play;play=function(){_play.apply(this,arguments);if(P){P.rate=1;$('#psheet').hidden=true;tickP()}};
-// The player check only runs while the player is open, instead of a timer that never stops.
-let pT=0;function tickP(){clearInterval(pT);pT=setInterval(()=>{const skip=$('#v4skip'),nx=$('#v4next'),sh=$('#psheet');
-  if(!P||!pl.classList.contains('o')){skip.hidden=nx.hidden=sh.hidden=true;clearInterval(pT);return}
-  const v=$('#vid'),d=(P.url&&v.duration)||P.c.m*60,t=P.t,left=d-t,tv=P.c.mt==='tv';
-  skip.hidden=!(tv&&t>5&&t<90);const showN=tv&&P.ep<P.c.ep&&left<20&&left>0;nx.hidden=!showN;if(showN)nx.querySelector('b').textContent=Math.ceil(left);
-  $('#v4spd').textContent=(P.rate||1)+'×';$('#v4eps').hidden=!tv||P.c.ep<2;$('#v4pip').hidden=!P.url||!D.pictureInPictureEnabled},300)}
+// Player controls are provided by the selected embedded player.
 // ---- iOS tab bar (phones) ----
 const tbar=D.createElement('div');tbar.id='tabbar';tbar.setAttribute('role','navigation');tbar.setAttribute('aria-label','Tabs');
 tbar.innerHTML=[['home','home','Home'],['soon','flame','New & Hot'],['search','search','Search'],['profile','me','My Reel']].map(([r,i,l])=>`<button data-tb="${r}"><i>${i==='me'?'<span class="tbav"></span>':I(i)}</i>${l}</button>`).join('');D.body.append(tbar);

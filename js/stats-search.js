@@ -88,14 +88,10 @@ D.addEventListener('change',e=>{const t=e.target;
   if(t.id==='v3theme'){const u=me();if(!u)return;u.st.theme=t.value;save();applyTheme();toast('Theme updated','ok')}
   else if(t.id==='v3time'){const v=+t.value;t.value='';timePick(v)}});
 function help3(){const k=(a,b)=>`<div class="v3kb">${b}<span>${a.split('+').map(x=>`<kbd>${x}</kbd>`).join('')}</span></div>`;
-  $('#au').innerHTML='<div class="au v3help"><button class="x" data-a="cl" aria-label="Close">'+I('x')+'</button><h2>Keyboard shortcuts</h2><h4>Anywhere</h4>'+k('/','Search')+k('Ctrl+K','Command palette')+k('?','Show this help')+k('Esc','Close dialogs')+'<h4>Player</h4>'+k('Space','Play / pause')+k('←+→','Seek 10 seconds')+k('0–9','Jump to 0–90%')+k('N','Next episode')+k('M','Mute')+k('F','Fullscreen')+'</div>';$('#au').classList.add('o')}
-// Player keys run in the capture phase: the old handler ignored keys while a player button had focus, so Space "clicked" the close button.
-addEventListener('keydown',e=>{const el=e.target||{},tg=el.tagName||'',typing=(tg==='INPUT'&&el.type!=='range')||tg==='SELECT'||tg==='TEXTAREA';
-  if(P){if(typing||e.ctrlKey||e.metaKey||e.altKey)return;const v=$('#vid'),k=e.key;let h=1;
-    if(k==='Escape')stop();else if(k===' '||k==='k'||k==='K')ptoggle();else if(k==='ArrowLeft'||k==='j')pseek(-10);else if(k==='ArrowRight'||k==='l')pseek(10);
-    else if(k==='f'||k==='F')$('#fs').click();else if(k==='m'||k==='M'){if(P.url){v.muted=!v.muted;toast(v.muted?'Muted':'Sound on')}else toast('Demo playback has no sound')}
-    else if(k==='n'||k==='N')pnext();else if(/^[0-9]$/.test(k)){const d=(P.url&&v.duration)||P.c.m*60,t=d*(+k)/10;if(P.url)v.currentTime=t;else P.t=t;pwake()}else h=0;
-    if(h){e.preventDefault();e.stopImmediatePropagation()}return}
+  $('#au').innerHTML='<div class="au v3help"><button class="x" data-a="cl" aria-label="Close">'+I('x')+'</button><h2>Keyboard shortcuts</h2><h4>Anywhere</h4>'+k('/','Search')+k('Ctrl+K','Command palette')+k('?','Show this help')+k('Esc','Close dialogs')+'<h4>Player</h4>'+k('Esc','Close player')+k('N','Next episode (outside the video)')+k('F','Fullscreen (outside the video)')+ '<p>Use the embedded player’s controls and shortcuts for playback.</p>'+'</div>';$('#au').classList.add('o')}
+// Cross-origin embeds handle their own playback keys. Do not intercept button input.
+addEventListener('keydown',e=>{const el=e.target||{},tg=el.tagName||'',typing=tg==='INPUT'||tg==='SELECT'||tg==='TEXTAREA';
+  if(P){if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();stop()}else if(!typing&&!['BUTTON','A'].includes(tg)&&!e.ctrlKey&&!e.metaKey&&!e.altKey){if(e.key==='n'||e.key==='N'){e.preventDefault();pnext()}else if(e.key==='f'||e.key==='F'){e.preventDefault();const stage=$('#player-frame');if(document.fullscreenElement)document.exitFullscreen();else if(stage.requestFullscreen)stage.requestFullscreen()}}return}
   if(!typing&&e.key==='?'&&!e.ctrlKey&&!e.metaKey){e.preventDefault();e.stopImmediatePropagation();help3()}},true);
 addEventListener('offline',()=>toast('You’re offline. Some titles may not load','err'));addEventListener('online',()=>toast('Back online','ok'));
 const up=Object.assign(D.createElement('button'),{id:'v3top',innerHTML:I('arrowUp'),title:'Back to top'});up.setAttribute('aria-label','Back to top');up.onclick=()=>scrollTo({top:0,behavior:'smooth'});D.body.append(up);

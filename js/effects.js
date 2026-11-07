@@ -71,10 +71,8 @@ async function pkGo(b){b.innerHTML='<div class="pk"><div class="sk" style="margi
     b.querySelector('[data-det]').onclick=()=>{closeOvl(b);setTimeout(()=>detail(c.i),230)}}
   catch(e){b.innerHTML='<div class="pk">'+X+'<h2>Couldn’t find a pick</h2><p class="mu">Check your connection and try again.</p><button class="btn p" data-again="1">Retry</button></div>'}}
 const tb=Object.assign(A.createElement('button'),{className:'pf rnd',title:'Tonight’s pick',innerHTML:I('target')});tb.setAttribute('aria-label','Tonight’s pick');tb.onclick=openPick;$('#pf').before(tb);
-// keyboard: palette + player
+// The embedded players handle their own playback keyboard shortcuts.
 addEventListener('keydown',e=>{
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCmd();return}
-  if(!P||/^(BUTTON|INPUT|SELECT)$/.test((e.target||{}).tagName))return;
-  if(e.key===' '||e.key==='k'){e.preventDefault();ptoggle()}else if(e.key==='ArrowLeft')pseek(-10);else if(e.key==='ArrowRight')pseek(10);else if(e.key==='f')$('#fs').click()});
+  if(!P&&(e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openCmd()}});
 post();
 })();

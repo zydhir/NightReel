@@ -1,35 +1,80 @@
-// Nightreel · Demo player and video adapter (add licensed sources here)
-// ---- player: demo timeline, plus a <video> adapter for files you own or are licensed to stream ----
-// Add sources you have rights to:  window.NIGHTREEL_SOURCES = { 'movie603':'https://…/film.mp4', 'tv1399:1:1':'https://…/s1e1.m3u8' }
-// (movies use movie<tmdbId>, episodes use tv<tmdbId>:<season>:<episode>)
-let P=null,praf=0,plt=0,psv=0,phd=0;
+// Nightreel · Third-party embedded players (TMDB IDs for movies and TV)
+let P=null;
+const PLAYER_ORIGINS={src:'https://cinesrc.st',xtream:'https://cinextream.cc'};
 const epInSeason=(c,ep)=>ep-((c.seasons||[]).filter(s=>s.n<so(c,ep)).reduce((a,s)=>a+s.ec,0));
-const srcFor=(c,ep)=>{const S=window.NIGHTREEL_SOURCES||{};return S[c.mt+c.tid+(c.mt==='tv'?':'+so(c,ep)+':'+epInSeason(c,ep):'')]||''};
-const fmt2=s=>{s=Math.max(0,s|0);const h=s/3600|0,m=(s%3600)/60|0;return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s%60).padStart(2,'0')};
-function play(id,ep){
-  if(!needAuth(()=>play(id,ep)))return;const c=C[id];if(!c)return;const pr=me().prog[id];
-  if(ep==null)ep=pr&&!done(pr,c)?pr.ep:1;ep=Math.max(1,Math.floor(+ep||1));
-  const url=srcFor(c,ep),t=pr&&pr.ep===ep&&!done(pr,c)?pr.t:0,v=$('#vid');
-  P={c,ep,t,on:true,url};$('#md').classList.remove('o');$('#pl').classList.add('o');document.body.style.overflow='hidden';
-  $('#pti').textContent=c.t;$('#pep').textContent=c.ep>1?se(c,ep):TY[c.ty];$('#nx').style.display=c.ep>1&&ep<c.ep?'':'none';
-  $('#scn').style.backgroundImage=art(id,1);$('#scn').hidden=!!url;v.hidden=!url;
-  $('#pn2').textContent=url?'':'Demo playback. Connect your own licensed video source to stream real files.';
-  if(url){v.src=url;v.onloadedmetadata=()=>{if(t)v.currentTime=t};v.onended=()=>{if(P&&P.ep<P.c.ep&&ON(me().st,'auto'))pnext()};v.play().catch(()=>{})}
-  plt=performance.now();psv=0;pwake();cancelAnimationFrame(praf);praf=requestAnimationFrame(ptick)}
-function ptick(now){if(!P)return;const dt=Math.min(.1,(now-plt)/1000);plt=now;const c=P.c,v=$('#vid'),d=(P.url&&v.duration)||c.m*60;
-  if(P.url){P.t=v.currentTime||P.t;P.on=!v.paused&&!v.ended}
-  else if(P.on){P.t+=dt*(P.rate||1);if(P.t>=d){if(P.ep<c.ep&&ON(me().st,'auto')){pnext();return}P.t=d;P.on=false}}
-  $('#rg').max=d;$('#rg').value=P.t;$('#tm').textContent=fmt2(P.t)+' / '+fmt2(d);{const pb=$('#ppb'),ps=P.on?'pause':'play';if(pb.dataset.s!==ps){pb.dataset.s=ps;pb.innerHTML=I(ps)}}
-  if(P.on){psv+=dt;if(psv>2){psv=0;const u=me(),k=new Date().toISOString().slice(0,10);u.days=u.days||{};u.days[k]=(u.days[k]||0)+2;keep()}}
-  praf=requestAnimationFrame(ptick)}
-function keep(){if(!P)return;const u=me();u.prog[P.c.i]={ep:P.ep,t:P.t,u:Date.now()};save()}
-function markWatched(){if(!P)return;const u=me();u.prog[P.c.i]={ep:P.ep,t:P.c.m*60,u:Date.now()};save()}
-function pnext(){if(!P||P.ep>=P.c.ep)return;const c=P.c,e=P.ep+1;markWatched();play(c.i,e)}
-function ptoggle(){if(!P)return;const v=$('#vid');if(P.url)v.paused?v.play():v.pause();else P.on=!P.on;pwake()}
-function pseek(s){if(!P)return;const v=$('#vid');if(P.url)v.currentTime=Math.max(0,v.currentTime+s);else P.t=Math.max(0,Math.min(P.c.m*60,P.t+s));pwake()}
-function pwake(){const el=$('#pl');el.classList.remove('hid');clearTimeout(phd);phd=setTimeout(()=>P&&P.on&&me()&&ON(me().st,'ctl')&&el.classList.add('hid'),3000)}
-function stop(){if(!P)return;keep();P=null;cancelAnimationFrame(praf);const v=$('#vid');v.pause();v.removeAttribute('src');v.load();$('#pl').classList.remove('o');document.body.style.overflow='';if(document.fullscreenElement)document.exitFullscreen();render()}
-$('#pcl').onclick=stop;$('#ppb').onclick=ptoggle;$('#b10').onclick=()=>pseek(-10);$('#f10').onclick=()=>pseek(10);$('#nx').onclick=pnext;
-$('#rg').oninput=e=>{if(!P)return;const v=$('#vid');if(P.url)v.currentTime=+e.target.value;else P.t=+e.target.value;pwake()};
-$('#fs').onclick=()=>document.fullscreenElement?document.exitFullscreen():$('#pl').requestFullscreen&&$('#pl').requestFullscreen();
-$('#pl').addEventListener('mousemove',pwake);$('#pl').addEventListener('touchstart',pwake,{passive:true});$('#scn').onclick=ptoggle;
+function playerChoice(){try{return localStorage.getItem('nr_player')==='xtream'?'xtream':'src'}catch(e){return 'src'}}
+function playerColor(){const color=getComputedStyle(document.documentElement).getPropertyValue('--a').trim();return /^#[\da-f]{6}$/i.test(color)?color:'#8B7BFF'}
+function playerUrl(c,ep,provider,time){
+  const season=so(c,ep),episode=epInSeason(c,ep),id=encodeURIComponent(c.tid),origin=PLAYER_ORIGINS[provider];
+  const path=provider==='src'?'/embed/'+c.mt+'/'+id:'/api/embed/'+c.mt+'/'+id+(c.mt==='tv'?'/'+season+'/'+episode:'');
+  const url=new URL(path,origin),color=playerColor();
+  if(provider==='src'){
+    if(c.mt==='tv'){url.searchParams.set('s',season);url.searchParams.set('e',episode)}
+    url.searchParams.set('color',color);url.searchParams.set('autonext','false');
+    if(time>0)url.searchParams.set('t',Math.floor(time));
+  }else{
+    url.searchParams.set('color',color.slice(1));url.searchParams.set('title',c.t);
+  }
+  return url.href;
+}
+function playerNotice(message){const n=$('#player-notice');n.textContent=message||'';n.hidden=!message}
+function loadPlayer(provider){
+  if(!P||!PLAYER_ORIGINS[provider])return;
+  P.provider=provider;P.lastTime=null;P.lastSaved=0;
+  document.querySelectorAll('[data-player]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.player===provider)));
+  playerNotice(provider==='xtream'&&P.t>0?'Xtream may start from the beginning; resume support depends on the provider.':'');
+  $('#player-frame').src=playerUrl(P.c,P.ep,provider,P.t);
+}
+async function play(id,ep){
+  if(!needAuth(()=>play(id,ep)))return;
+  const c=C[id];if(!c||!c.tid||!['movie','tv'].includes(c.mt))return;
+  if(c.mt==='tv'&&!c.v3&&!c.seasons?.length)await hyd(id);
+  if(!me())return;
+  const pr=me().prog[id];if(ep==null)ep=pr&&!done(pr,c)?pr.ep:1;
+  ep=Math.max(1,Math.floor(+ep||1));
+  if(c.mt==='tv'&&ep>1&&!c.seasons?.length){toast('Could not load season information. Please try again.','err');return}
+  const t=pr&&pr.ep===ep&&!done(pr,c)?pr.t:0;
+  if(P)keep();
+  P={c,ep,t,provider:playerChoice(),hasProgress:false,lastTime:null,lastSaved:0};
+  $('#md').classList.remove('o');$('#pl').classList.add('o');document.body.style.overflow='hidden';
+  $('#pti').textContent=c.t;$('#pep').textContent=c.mt==='tv'?se(c,ep):TY[c.ty];
+  loadPlayer(P.provider);$('#pcl').focus();
+}
+function keep(){if(!P||!P.hasProgress||!me())return;me().prog[P.c.i]={ep:P.ep,t:P.t,u:Date.now()};save()}
+function markWatched(){if(!P||!me())return;me().prog[P.c.i]={ep:P.ep,t:Math.max(P.t,P.c.m*60),u:Date.now()};save()}
+function pnext(){if(!P||P.c.mt!=='tv'||P.ep>=P.c.ep)return;const c=P.c,e=P.ep+1;markWatched();P.hasProgress=false;play(c.i,e)}
+function stop(){if(!P)return;keep();P=null;$('#player-frame').removeAttribute('src');$('#pl').classList.remove('o');playerNotice('');document.body.style.overflow='';if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});render()}
+$('#pcl').onclick=stop;
+document.querySelectorAll('[data-player]').forEach(b=>b.addEventListener('click',()=>{if(!P||P.provider===b.dataset.player)return;keep();try{localStorage.setItem('nr_player',b.dataset.player)}catch(e){}loadPlayer(b.dataset.player)}));
+function updatePlayerTime(time,duration){
+  time=Number(time);duration=Number(duration);if(!Number.isFinite(time)||time<0)return;
+  if(Number.isFinite(duration)&&duration>0)time=Math.min(time,duration);
+  // Count only short, forward playback intervals, never seeks or long gaps.
+  if(P.lastTime!==null){const delta=time-P.lastTime;if(delta>0&&delta<=5&&me()){const u=me(),day=new Date().toISOString().slice(0,10);u.days=u.days||{};u.days[day]=(u.days[day]||0)+delta}}
+  P.lastTime=time;P.t=time;P.hasProgress=true;
+  if(Date.now()-P.lastSaved>5000){keep();P.lastSaved=Date.now()}
+}
+function syncEpisode(season,episode){
+  if(!P||P.c.mt!=='tv')return;
+  season=Number(season);episode=Number(episode);
+  const seasons=P.c.seasons||[],s=seasons.find(x=>x.n===season);
+  if(!s||!Number.isInteger(episode)||episode<1||episode>s.ec)return;
+  const ep=seasons.filter(x=>x.n<season).reduce((n,x)=>n+x.ec,0)+episode;
+  if(ep===P.ep)return;keep();P.ep=ep;P.t=0;P.lastTime=null;P.hasProgress=false;$('#pep').textContent=se(P.c,ep);
+}
+window.addEventListener('message',event=>{
+  if(!P||event.origin!==PLAYER_ORIGINS[P.provider]||event.source!==$('#player-frame').contentWindow)return;
+  let data=event.data;if(typeof data==='string'){try{data=JSON.parse(data)}catch(e){return}}
+  if(!data||typeof data!=='object')return;
+  if(P.provider==='src'){
+    if(data.type==='cinesrc:timeupdate')updatePlayerTime(data.currentTime,data.duration);
+    else if(data.type==='cinesrc:nextepisode'){const before=P.ep;syncEpisode(data.season,data.episode);if(!data.internalNavigation&&P.ep!==before)loadPlayer('src')}
+    else if(data.type==='cinesrc:ended'){markWatched();if(P.c.mt==='tv'&&ON(me().st,'auto'))pnext()}
+    else if(data.type==='cinesrc:error')playerNotice('CineSrc could not play this title. Try Xtream or check Where to watch.');
+  }else{
+    if(data.event==='time')updatePlayerTime(data.time,data.duration);
+    else if(data.event==='VIDEO_ENDED')syncEpisode(data.season,data.episode);
+    else if(data.event==='complete')markWatched();
+    else if(data.event==='player_error'&&data.reason==='all_servers_failed')playerNotice('Xtream could not play this title. Try CineSrc or check Where to watch.');
+  }
+});

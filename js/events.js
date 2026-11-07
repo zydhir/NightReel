@@ -78,7 +78,7 @@ $('#q').onfocus=()=>{if(!$('#q').value&&rs().length){$('#rsd').innerHTML=`<div c
 const rr=()=>{const r=location.hash.slice(1);if(!q&&(r===''||r==='home'||r==='list'))render()};
 addEventListener('hashchange',()=>{$('#drw').classList.remove('o');$('#hb').setAttribute('aria-expanded','false');if(keepGS)keepGS=0;else{GS=[];SO='pop';DY=null;RG=0}G='All';q='';LISTQ='';$('#q').value='';scrollTo(0,0);render()});
 addEventListener('scroll',()=>$('#nav').classList.toggle('s',scrollY>40),{passive:true});
-const FOC='button,a[href],input,select,[tabindex]:not([tabindex="-1"])';
+const FOC='button,a[href],input,select,iframe,[tabindex]:not([tabindex="-1"])';
 addEventListener('keydown',e=>{
   if(e.key==='Tab'){const d=[...document.querySelectorAll('.ovl.o,#pl.o')].pop();if(d){const f=[...d.querySelectorAll(FOC)].filter(x=>!x.disabled&&x.offsetParent!==null),i=f.indexOf(document.activeElement);if(f.length&&(i<0||(e.shiftKey&&i===0)||(!e.shiftKey&&i===f.length-1))){e.preventDefault();f[e.shiftKey?f.length-1:0].focus()}}}
   const ty=/INPUT|SELECT|TEXTAREA/.test((document.activeElement||{}).tagName);
