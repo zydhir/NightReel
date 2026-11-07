@@ -4,6 +4,8 @@
 !/index.html
 !/css/
 !/js/
+!/img/
+!/manifest.webmanifest
 !/README.md
 !/netlify.toml
 !/.gitignore

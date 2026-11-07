@@ -112,7 +112,9 @@ function annHTML(a,preview){const ic={info:'megaphone',success:'check',warning:'
 async function loadAnn(){if(!SB)return;try{const {data,error}=await SB.from('site_config').select('value,updated_at').eq('key','announcement').maybeSingle();if(error||!data)return;
     ADM.ann=data.value||{};const a=ADM.ann,stamp=data.updated_at||'',old=$('#nr-ann-wrap');if(old)old.remove();
     if(!a.active||!a.text||store.get('nr_ann_x','')===stamp)return;const w=D.createElement('div');w.id='nr-ann-wrap';w.innerHTML=annHTML(a);D.body.append(w);
-    w.querySelector('.nr-ann-x').onclick=()=>{store.set('nr_ann_x',stamp);w.remove()}}catch(e){}}
+    w.querySelector('.nr-ann-x').onclick=()=>{store.set('nr_ann_x',stamp);w.remove()};
+    // Phones: the banner covers the hero, so fade it out after 6s (it shows again next visit until dismissed)
+    if(matchMedia('(max-width:720px)').matches)setTimeout(()=>{if(!w.isConnected)return;w.classList.add('out');setTimeout(()=>w.remove(),400)},6000)}catch(e){}}
 // ---- page ----
 function gate(t,p,btn){return `<div class="pg"><div class="empty-scene adm-gate"><div aria-hidden="true">${I('shield')}</div><b>${t}</b><p>${p}</p>${btn||''}</div></div>`}
 function setup(){return `<div class="pg"><div class="page-heading"><div><h1>${I('shield')} Admin setup</h1><p>One step left: the database rules that make this panel private.</p></div></div>

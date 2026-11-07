@@ -90,3 +90,14 @@
 .ann-warning{border-color:rgba(255,214,10,.35)}.ann-success{border-color:rgba(48,209,88,.35)}
 .ann-prev .nr-ann{box-shadow:var(--glhl)}
 @media (max-width:720px){.adm-grid{grid-template-columns:1fr}.adm-hr{grid-template-columns:86px 1fr 40px}#nr-ann-wrap{top:calc(70px + env(safe-area-inset-top,0px))}.adm-tools .btn{margin-left:0}}
+
+/* Phones only: compact announcement banner (fades away on its own, see loadAnn) and one-row hero buttons */
+#nr-ann-wrap.out{opacity:0;transform:translate(-50%,-10px);transition:opacity .35s,transform .35s;pointer-events:none}
+@media (max-width:720px){
+  #nr-ann-wrap{top:calc(66px + env(safe-area-inset-top,0px));width:calc(100vw - 20px)}
+  .nr-ann{gap:9px;padding:7px 7px 7px 12px;border-radius:14px;font-size:13px}
+  .nr-ann span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nr-ann-x{width:26px;height:26px}
+  .hc .go{flex-wrap:nowrap;gap:8px}
+  .hc .go .btn{flex:1 1 auto;justify-content:center;padding:12px 10px;font-size:14px;white-space:nowrap;min-width:0}
+}
