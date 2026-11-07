@@ -71,9 +71,10 @@
     <div class="player-chooser" role="group" aria-label="Choose player">
       <button type="button" data-player="src" aria-pressed="true">CineSrc</button>
       <button type="button" data-player="xtream" aria-pressed="false">Xtream</button>
+      <button type="button" data-player="vidy" aria-pressed="false">Vidy</button>
     </div>
   </div>
-  <div class="player-stage"><iframe id="player-frame" title="Video player" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+  <div class="player-stage"><iframe id="player-frame" title="Video player" allow="encrypted-media; autoplay *; fullscreen *; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
   <div class="player-notice" id="player-notice" role="status" aria-live="polite" hidden></div>
 </div>
 <div id="toast"></div>
@@ -86,7 +87,7 @@
 <script src="js/info-pages.js"></script><!-- About, Privacy, Terms, DMCA and Contact pages (set CONTACT_EMAIL here) -->
 <script src="js/pages.js"></script><!-- Router (render), history, coming soon, people, browse grids, hero rotation -->
 <script src="js/detail.js"></script><!-- Title detail popup, seasons and episodes, where to watch -->
-<script src="js/player.js"></script><!-- CineSrc and Xtream player integration -->
+<script src="js/player.js"></script><!-- CineSrc, Xtream and Vidy player integration -->
 <script src="js/events.js"></script><!-- Click and keyboard handlers, data loading, start-up -->
 <script src="js/effects.js"></script><!-- Splash, scroll effects, quick add, command palette, Tonight’s pick -->
 <script src="js/stats-search.js"></script><!-- Stats page, new episodes, search filters, title links, player keys -->
