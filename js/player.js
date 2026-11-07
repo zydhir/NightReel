@@ -1,17 +1,22 @@
 // Nightreel · Third-party embedded players (TMDB IDs for movies and TV)
 let P=null;
-const PLAYER_ORIGINS={src:'https://cinesrc.st',xtream:'https://cinextream.cc'};
+const PLAYER_ORIGINS={src:'https://cinesrc.st',xtream:'https://cinextream.cc',vidy:'https://www.vidy.st'};
 const epInSeason=(c,ep)=>ep-((c.seasons||[]).filter(s=>s.n<so(c,ep)).reduce((a,s)=>a+s.ec,0));
-function playerChoice(){try{return localStorage.getItem('nr_player')==='xtream'?'xtream':'src'}catch(e){return 'src'}}
+function playerChoice(){try{const saved=localStorage.getItem('nr_player');return Object.prototype.hasOwnProperty.call(PLAYER_ORIGINS,saved)?saved:'src'}catch(e){return 'src'}}
 function playerColor(){const color=getComputedStyle(document.documentElement).getPropertyValue('--a').trim();return /^#[\da-f]{6}$/i.test(color)?color:'#8B7BFF'}
 function playerUrl(c,ep,provider,time){
   const season=so(c,ep),episode=epInSeason(c,ep),id=encodeURIComponent(c.tid),origin=PLAYER_ORIGINS[provider];
-  const path=provider==='src'?'/embed/'+c.mt+'/'+id:'/api/embed/'+c.mt+'/'+id+(c.mt==='tv'?'/'+season+'/'+episode:'');
+  const tvPath=c.mt==='tv'?'/'+season+'/'+episode:'';
+  const path=provider==='src'?'/embed/'+c.mt+'/'+id:provider==='vidy'?'/'+c.mt+'/'+id+tvPath:'/api/embed/'+c.mt+'/'+id+tvPath;
   const url=new URL(path,origin),color=playerColor();
   if(provider==='src'){
     if(c.mt==='tv'){url.searchParams.set('s',season);url.searchParams.set('e',episode)}
     url.searchParams.set('color',color);url.searchParams.set('autonext','false');
     if(time>0)url.searchParams.set('t',Math.floor(time));
+  }else if(provider==='vidy'){
+    url.searchParams.set('color',color.slice(1));
+    if(time>0)url.searchParams.set('progress',Math.floor(time));
+    // Vidy does not document episode-change events, so keep episode navigation in Nightreel.
   }else{
     url.searchParams.set('color',color.slice(1));url.searchParams.set('title',c.t);
   }
@@ -70,11 +75,14 @@ window.addEventListener('message',event=>{
     if(data.type==='cinesrc:timeupdate')updatePlayerTime(data.currentTime,data.duration);
     else if(data.type==='cinesrc:nextepisode'){const before=P.ep;syncEpisode(data.season,data.episode);if(!data.internalNavigation&&P.ep!==before)loadPlayer('src')}
     else if(data.type==='cinesrc:ended'){markWatched();if(P.c.mt==='tv'&&ON(me().st,'auto'))pnext()}
-    else if(data.type==='cinesrc:error')playerNotice('CineSrc could not play this title. Try Xtream or check Where to watch.');
-  }else{
+    else if(data.type==='cinesrc:error')playerNotice('CineSrc could not play this title. Try another player or check Where to watch.');
+  }else if(P.provider==='xtream'){
     if(data.event==='time')updatePlayerTime(data.time,data.duration);
     else if(data.event==='VIDEO_ENDED')syncEpisode(data.season,data.episode);
     else if(data.event==='complete')markWatched();
-    else if(data.event==='player_error'&&data.reason==='all_servers_failed')playerNotice('Xtream could not play this title. Try CineSrc or check Where to watch.');
+    else if(data.event==='player_error'&&data.reason==='all_servers_failed')playerNotice('Xtream could not play this title. Try another player or check Where to watch.');
+  }else if(P.provider==='vidy'){
+    if(data.event==='timeupdate')updatePlayerTime(data.currentTime,data.duration);
+    else if(data.event==='ended'){markWatched();if(P.c.mt==='tv'&&ON(me().st,'auto'))pnext()}
   }
 });
