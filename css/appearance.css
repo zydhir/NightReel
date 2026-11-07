@@ -104,4 +104,4 @@ html[data-dens="compact"] .row{margin:20px 0}html[data-dens="compact"] .sc{gap:8
 .player-chooser{position:absolute;left:50%;transform:translateX(-50%);display:flex;gap:4px;padding:4px;border:1px solid var(--gb);border-radius:999px;background:var(--g)}
 .player-chooser button{border:0;border-radius:999px;background:transparent;color:var(--mu);font-weight:700;padding:9px 18px;white-space:nowrap}.player-chooser button[aria-pressed="true"]{background:linear-gradient(90deg,var(--a),var(--b));color:#fff}
 .player-stage{flex:1;min-height:0;background:#000}.player-stage iframe{display:block;width:100%;height:100%;border:0}.player-notice{flex:none;padding:8px 4vw;color:var(--tx);background:var(--s);font-size:13px;text-align:center}
-@media(max-width:650px){.player-bar{min-height:112px;align-items:flex-start;padding-bottom:57px}.player-title{max-width:calc(100% - 60px)}.player-chooser{top:auto;bottom:8px}.player-chooser button{padding:6px 16px}}
+@media(max-width:800px){.player-bar{min-height:112px;align-items:flex-start;padding-bottom:57px}.player-title{max-width:calc(100% - 60px)}.player-chooser{top:auto;bottom:8px}.player-chooser button{padding:6px 16px}}
