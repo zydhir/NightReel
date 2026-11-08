@@ -36,8 +36,14 @@
   // Read config strictly from same-origin parent/storage (never from external query params)
   var raw=null;
   try{
-    if(window.parent&&window.parent!==window&&window.parent.NR_ADS&&typeof window.parent.NR_ADS.getConfig==='function'){
-      raw=window.parent.NR_ADS.getConfig();
+    if(window.parent&&window.parent!==window&&window.parent.NR_ADS){
+      if(slot==='detail'&&typeof window.parent.NR_ADS.status==='function'){
+        var st=window.parent.NR_ADS.status();
+        if(st&&st.gate&&!st.gate.ok)return;
+      }
+      if(typeof window.parent.NR_ADS.getConfig==='function'){
+        raw=window.parent.NR_ADS.getConfig();
+      }
     }
   }catch(e){}
   if(!raw){

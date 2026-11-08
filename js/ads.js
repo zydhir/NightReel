@@ -22,6 +22,8 @@ const DEFAULTS=Object.assign({
   smartMode:'play',          // 'play' = On Play (capped) + Partner link | 'button' = Partner link only | 'off' = Disabled
   smartCapHours:12,          // Hours between automatic Play-click Smartlink tabs per browser
   smartUrl:'https://directyp.org/4/6906911021995628340167e682dddcd1',
+  adFreeEmails:[],           // Specific emails chosen by admin that never see ads
+  skipUsers:false,           // Optional: show ads to logged-out guests only
   skipAdmin:false,           // Optional: pause ads when signed in as verified site admin
   skipKids:true,             // Always keep Kids profiles ad-free
   skipAuth:true              // Keep sign-in, admin and legal pages ad-free
@@ -29,6 +31,29 @@ const DEFAULTS=Object.assign({
 
 function escHtml(v){
   return String(v??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+function normalizeEmail(raw){
+  return String(raw??'').trim().toLowerCase();
+}
+
+function isValidEmail(raw){
+  const e=normalizeEmail(raw);
+  return e.length<=160&&/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+}
+
+function parseEmailList(raw){
+  const items=Array.isArray(raw)
+    ?raw.flatMap(x=>String(x??'').split(/[\s,;]+/))
+    :String(raw??'').split(/[\s,;]+/);
+  const seen=new Set(),emails=[],invalid=[];
+  for(const item of items){
+    const e=normalizeEmail(item);
+    if(!e)continue;
+    if(!isValidEmail(e)){invalid.push(item.trim());continue}
+    if(!seen.has(e)&&emails.length<200){seen.add(e);emails.push(e)}
+  }
+  return {ok:invalid.length===0,emails,invalid};
 }
 
 function cleanRaw(raw){
@@ -129,6 +154,10 @@ function validateConfig(draft){
   if(d.nativeOn&&!nat.ok)return {ok:false,field:'native',error:'Native Banner: '+nat.error};
   if(d.bannerOn&&!ban.ok)return {ok:false,field:'banner',error:'160×300 Banner: '+ban.error};
   if(d.smartMode!=='off'&&!sl.ok)return {ok:false,field:'smart',error:'Smartlink: '+sl.error};
+  if(d.adFreeEmails!==undefined){
+    const em=parseEmailList(d.adFreeEmails);
+    if(!em.ok)return {ok:false,field:'adFreeEmails',error:'Invalid email address: '+em.invalid[0]};
+  }
   return {ok:true,soc,nat,ban,sl};
 }
 
@@ -146,6 +175,8 @@ function normalizeConfig(raw,base=DEFAULTS){
   });
   const sl=parseSmartlinkInput(r.smartUrl!==undefined?r.smartUrl:base.smartUrl);
   const cap=[4,12,24].includes(+r.smartCapHours)?+r.smartCapHours:(+base.smartCapHours||12);
+  const emSource=r.adFreeEmails!==undefined?r.adFreeEmails:(base.adFreeEmails||[]);
+  const em=parseEmailList(emSource);
   return {
     active:r.active!==undefined?!!r.active:!!base.active,
     socialOn:r.socialOn!==undefined?!!r.socialOn:(base.socialOn!==false),
@@ -161,6 +192,8 @@ function normalizeConfig(raw,base=DEFAULTS){
     smartMode:SMART_MODES.includes(r.smartMode)?r.smartMode:(base.smartMode||'play'),
     smartCapHours:cap,
     smartUrl:sl.ok?sl.url:String(r.smartUrl??base.smartUrl??'').trim(),
+    adFreeEmails:em.emails,
+    skipUsers:r.skipUsers!==undefined?!!r.skipUsers:!!base.skipUsers,
     skipAdmin:r.skipAdmin!==undefined?!!r.skipAdmin:!!base.skipAdmin,
     skipKids:r.skipKids!==undefined?!!r.skipKids:(base.skipKids!==false),
     skipAuth:r.skipAuth!==undefined?!!r.skipAuth:(base.skipAuth!==false)
@@ -190,7 +223,7 @@ function buildHtmlSnippet(rawCfg){
 }
 
 function isAdConfigObj(v){
-  return !!(v&&typeof v==='object'&&('socialSrc' in v||'nativeSrc' in v||'bannerSrc' in v||'smartUrl' in v));
+  return !!(v&&typeof v==='object'&&('socialSrc' in v||'nativeSrc' in v||'bannerSrc' in v||'smartUrl' in v||'adFreeEmails' in v));
 }
 
 // ---- Runtime state ----
@@ -198,12 +231,15 @@ const cached=typeof store!=='undefined'&&store&&store.get?store.get('nr_ads_cfg_
 let cfg=normalizeConfig(cached&&cached.value?cached.value:null,DEFAULTS);
 let updatedAt=(cached&&cached.updated_at)||'';
 let syncMode=cached&&cached.syncMode?cached.syncMode:'default';
+let devicePaused=!!(typeof store!=='undefined'&&store&&store.get&&store.get('nr_ads_device_mute',false));
+let sessionEmail='';
 let remoteLoaded=false;
 let adminResolved=false;
 let resolveAdminWait=null;
 const adminWaitPromise=new Promise(r=>{resolveAdminWait=r});
 let detailBannerTimer=0;
 const listeners=new Set();
+const remoteHooks=new Set();
 
 const slots={
   social:{state:'idle',src:'',host:'',filled:null},
@@ -230,6 +266,48 @@ function currentRoute(){
   return h||'home';
 }
 
+function currentUserEmail(){
+  if(typeof AUTH!=='undefined'&&AUTH&&AUTH.email)return normalizeEmail(AUTH.email);
+  if(G.AUTH&&G.AUTH.email)return normalizeEmail(G.AUTH.email);
+  if(sessionEmail)return normalizeEmail(sessionEmail);
+  if(typeof A!=='undefined'&&A&&A.email&&A.email!=='local'&&isValidEmail(A.email))return normalizeEmail(A.email);
+  if(G.A&&G.A.email&&G.A.email!=='local'&&isValidEmail(G.A.email))return normalizeEmail(G.A.email);
+  // Cold-boot synchronous check of Supabase's persisted auth token before INITIAL_SESSION fires
+  try{
+    const ls=G.localStorage||(typeof localStorage!=='undefined'?localStorage:null);
+    if(ls&&typeof ls.length==='number'){
+      for(let i=0;i<ls.length;i++){
+        const k=ls.key(i);
+        if(k&&/^sb-.*-auth-token$/.test(k)){
+          const parsed=JSON.parse(ls.getItem(k)||'null');
+          const em=parsed&&parsed.user&&parsed.user.email;
+          if(em)return normalizeEmail(em);
+        }
+      }
+    }
+  }catch(e){}
+  return '';
+}
+
+function isAdFreeEmail(email,c=cfg){
+  const e=normalizeEmail(email);
+  if(!e||!Array.isArray(c.adFreeEmails)||!c.adFreeEmails.length)return false;
+  return c.adFreeEmails.includes(e);
+}
+
+function getDevicePause(){
+  return !!devicePaused;
+}
+
+function setDevicePause(on){
+  devicePaused=!!on;
+  if(typeof store!=='undefined'&&store&&store.set){
+    store.set('nr_ads_device_mute',devicePaused);
+  }
+  evaluate();
+  return devicePaused;
+}
+
 function isKidsProfile(u){
   if(!u)return false;
   if(u.kids||u.kid||(u.st&&(u.st.kids||u.st.kid)))return true;
@@ -245,8 +323,12 @@ function hasAnyEnabledUnit(c=cfg){
 }
 
 function gateReason(){
-  if(!cfg.active)return {ok:false,code:'disabled',reason:'Ads are turned off'};
+  if(!cfg.active)return {ok:false,code:'disabled',reason:'Ads are turned off site-wide'};
+  if(devicePaused)return {ok:false,code:'device',reason:'Paused on this browser only'};
   if(!hasAnyEnabledUnit(cfg))return {ok:false,code:'unconfigured',reason:'All ad formats are turned off or empty'};
+  const email=currentUserEmail();
+  if(email&&isAdFreeEmail(email,cfg))return {ok:false,code:'vip',reason:'Ad-free account ('+email+')'};
+  if(cfg.skipUsers&&email)return {ok:false,code:'signed_in',reason:'Paused for signed-in accounts'};
   if(cfg.skipAdmin&&G.NR_ADMIN)return {ok:false,code:'admin',reason:'Paused for your admin account'};
   const u=typeof me==='function'?me():null;
   if(cfg.skipKids&&isKidsProfile(u))return {ok:false,code:'kids',reason:'Paused on Kids profile'};
@@ -280,11 +362,12 @@ function syncNative(){
   const gate=gateReason();
   const nat=parseNativeInput(cfg.nativeSrc,cfg.nativeContainerId);
   if(!gate.ok||!cfg.nativeOn||!nat.ok||!nat.src){
+    const hlink=D.getElementById('nr-native-slink');
+    if(hlink)hlink.hidden=true;
     sec.hidden=true;
     return;
   }
 
-  // Update optional Partner offer link in the Sponsored header
   const sl=parseSmartlinkInput(cfg.smartUrl);
   const hlink=D.getElementById('nr-native-slink');
   if(hlink){
@@ -311,7 +394,6 @@ function syncNative(){
     if(slots.native.state==='loaded')slots.native.filled=hasNodes;
   };
 
-  // Unhide BEFORE script injection so Adsterra measures real container width
   sec.hidden=false;
   checkFilled();
 
@@ -381,8 +463,8 @@ function onBannerEvent(slotName,state,filled){
   };
   if(key==='banner'&&D){
     const box=D.querySelector('#md .nr-ad-160');
-    if(box&&(state==='blocked'||filled===false))box.hidden=true;
-    else if(box&&filled===true)box.hidden=false;
+    if(box&&(state==='blocked'||filled===false||!gateReason().ok||!cfg.bannerOn))box.hidden=true;
+    else if(box&&filled===true&&gateReason().ok&&cfg.bannerOn)box.hidden=false;
   }
   emit();
 }
@@ -423,6 +505,15 @@ function mountBannerPreview(container){
   return true;
 }
 
+function syncOpenDetailAds(){
+  if(!D||!D.querySelector)return;
+  const gate=gateReason();
+  const box=D.querySelector('#md .nr-ad-160');
+  if(box)box.hidden=!gate.ok||!cfg.bannerOn;
+  const slink=D.querySelector('#md .nr-ad-slink');
+  if(slink)slink.hidden=!gate.ok||cfg.smartMode==='off';
+}
+
 function mountDetailAds(id,keep){
   if(!D)return;
   clearTimeout(detailBannerTimer);
@@ -431,7 +522,6 @@ function mountDetailAds(id,keep){
   const aside=D.querySelector('#md .ov2 aside');
   if(!aside)return;
 
-  // 1. Partner Smartlink inside "Look it up" links
   const sl=parseSmartlinkInput(cfg.smartUrl);
   if(cfg.smartMode!=='off'&&sl.ok&&sl.url&&!aside.querySelector('.nr-ad-slink')){
     const linksBox=aside.querySelector('.v3links');
@@ -440,7 +530,6 @@ function mountDetailAds(id,keep){
     if(linksBox&&linksBox.insertAdjacentHTML)linksBox.insertAdjacentHTML('beforeend',linkHtml);
   }
 
-  // 2. 160×300 Banner inside aside (if hyd(id) is fetching TMDB details, hyd() will call detail(id,1) shortly)
   const ban=parseBannerInput(cfg.bannerSrc,{key:cfg.bannerKey,width:cfg.bannerWidth,height:cfg.bannerHeight});
   if(!cfg.bannerOn||!ban.ok||!ban.src)return;
   const c=(typeof C!=='undefined'&&Array.isArray(C))?C[id]:null;
@@ -476,6 +565,7 @@ function triggerPlaySmartlink(force=false){
 function evaluate(){
   syncSocial();
   syncNative();
+  syncOpenDetailAds();
   emit();
   return gateReason();
 }
@@ -491,8 +581,8 @@ function setConfig(nextCfg,stamp,mode){
   return cfg;
 }
 
-// Saves immediately to local browser state AND syncs to Supabase site_config
-// (supports both dedicated key='ads' and fallback inside key='announcement' if site_config has a key check constraint).
+// Saves site-wide settings to BOTH key='announcement' (publicly readable by 100% of visitors & guests
+// even when RLS restricts key='ads' to admins) AND key='ads' when supported.
 async function saveConfig(nextCfg,opts={}){
   const v=validateConfig(nextCfg);
   if(!v.ok)return {ok:false,error:v.error,field:v.field};
@@ -504,19 +594,9 @@ async function saveConfig(nextCfg,opts={}){
     return {ok:true,cfg:clean,synced:false,syncMode:'local',remoteError:'Supabase client unavailable'};
   }
 
-  let firstErr='';
-  try{
-    const {error}=await SB.from('site_config').upsert({key:'ads',value:clean,updated_at:stamp});
-    if(!error){
-      setConfig(clean,stamp,'ads');
-      return {ok:true,cfg:clean,synced:true,syncMode:'ads'};
-    }
-    firstErr=error.message||'Could not write key=ads';
-  }catch(e){
-    firstErr=(e&&e.message)||'Could not write key=ads';
-  }
+  let annOk=false,adsOk=false,lastErr='',mergedAnn=null;
 
-  // Fallback: embed ads config inside the permitted 'announcement' row without altering banner visibility
+  // 1. Always mirror into 'announcement' row's JSON so EVERY visitor/guest receives updates regardless of RLS on 'ads'
   try{
     let annBase=(opts.ann&&typeof opts.ann==='object')?{...opts.ann}:null;
     let annStamp='';
@@ -528,7 +608,7 @@ async function saveConfig(nextCfg,opts={}){
       }
     }
     const base=annBase||{text:'',link:'',kind:'info',active:false};
-    const merged={
+    mergedAnn={
       text:base.text||'',
       link:base.link||'',
       kind:base.kind||'info',
@@ -536,19 +616,49 @@ async function saveConfig(nextCfg,opts={}){
       ads:clean,
       ads_updated_at:stamp
     };
-    const {error:err2}=await SB.from('site_config').upsert({
+    const keepDismissStamp=(base.active&&base.text&&annStamp)?annStamp:stamp;
+    const {error}=await SB.from('site_config').upsert({
       key:'announcement',
-      value:merged,
-      updated_at:annStamp||stamp
+      value:mergedAnn,
+      updated_at:keepDismissStamp
     });
-    if(!err2){
-      setConfig(clean,stamp,'announcement');
-      return {ok:true,cfg:clean,synced:true,syncMode:'announcement',annValue:merged};
-    }
-    return {ok:true,cfg:clean,synced:false,syncMode:'local',remoteError:err2.message||firstErr};
+    if(!error)annOk=true;
+    else lastErr=error.message||'Could not write announcement config';
   }catch(e){
-    return {ok:true,cfg:clean,synced:false,syncMode:'local',remoteError:(e&&e.message)||firstErr};
+    lastErr=(e&&e.message)||'Could not write announcement config';
   }
+
+  // 2. Also write dedicated key='ads' when allowed by schema/constraints
+  try{
+    const {error}=await SB.from('site_config').upsert({key:'ads',value:clean,updated_at:stamp});
+    if(!error)adsOk=true;
+    else if(!annOk)lastErr=error.message||lastErr;
+  }catch(e){
+    if(!annOk)lastErr=(e&&e.message)||lastErr;
+  }
+
+  if(annOk||adsOk){
+    const mode=annOk?'announcement':'ads';
+    setConfig(clean,stamp,mode);
+    return {ok:true,cfg:clean,synced:true,syncMode:mode,annValue:annOk?mergedAnn:undefined};
+  }
+  return {ok:true,cfg:clean,synced:false,syncMode:'local',remoteError:lastErr};
+}
+
+async function addAdFreeEmail(rawInput,opts={}){
+  const parsed=parseEmailList(rawInput);
+  if(!parsed.ok||!parsed.emails.length){
+    return {ok:false,error:parsed.invalid.length?'Invalid email: '+parsed.invalid[0]:'Enter an email address first.'};
+  }
+  const merged=[...new Set([...(cfg.adFreeEmails||[]),...parsed.emails])];
+  const res=await saveConfig({...cfg,adFreeEmails:merged},opts);
+  return {...res,added:parsed.emails};
+}
+
+async function removeAdFreeEmail(email,opts={}){
+  const target=normalizeEmail(email);
+  const next=(cfg.adFreeEmails||[]).filter(e=>e!==target);
+  return saveConfig({...cfg,adFreeEmails:next},opts);
 }
 
 async function loadRemote(){
@@ -560,8 +670,8 @@ async function loadRemote(){
       const {data,error}=await tbl.in('key',['ads','announcement']);
       if(!error&&Array.isArray(data))rows=data;
     }else if(tbl&&typeof tbl.eq==='function'){
-      const {data,error}=await tbl.eq('key','ads').maybeSingle();
-      if(!error&&data)rows=[{key:'ads',...data}];
+      const {data,error}=await tbl.eq('key','announcement').maybeSingle();
+      if(!error&&data)rows=[{key:'announcement',...data}];
     }
     remoteLoaded=true;
 
@@ -580,13 +690,47 @@ async function loadRemote(){
     }
 
     if(bestCfg){
-      const localTs=updatedAt?(Date.parse(updatedAt)||0):0;
-      if(!localTs||bestTs>=localTs){
-        setConfig(bestCfg,bestStamp,bestMode);
+      // Only preserve local config over remote if an admin made a local-only edit while Supabase was unreachable
+      const hasUnsyncedLocalEdit=(syncMode==='local'&&!!G.NR_ADMIN&&updatedAt&&(Date.parse(updatedAt)||0)>bestTs);
+      if(!hasUnsyncedLocalEdit){
+        const normalizedRemote=normalizeConfig(bestCfg,DEFAULTS);
+        if(bestStamp!==updatedAt||JSON.stringify(normalizedRemote)!==JSON.stringify(cfg)){
+          setConfig(normalizedRemote,bestStamp,bestMode);
+        }
       }
     }
   }catch(e){}
   return cfg;
+}
+
+function attachLiveSync(){
+  // 1. Supabase Realtime channel for instant site-wide propagation across open visitor tabs
+  try{
+    if(typeof SB!=='undefined'&&SB&&typeof SB.channel==='function'){
+      SB.channel('nr-site-config-live')
+        .on('postgres_changes',{event:'*',schema:'public',table:'site_config'},()=>{
+          loadRemote();
+          remoteHooks.forEach(fn=>{try{fn()}catch(e){}});
+        })
+        .subscribe();
+    }
+  }catch(e){}
+
+  // 2. Refresh when visitor switches back to tab + lightweight background poll
+  if(D&&D.addEventListener){
+    D.addEventListener('visibilitychange',()=>{
+      if(!D.hidden){
+        loadRemote();
+        remoteHooks.forEach(fn=>{try{fn()}catch(e){}});
+      }
+    });
+  }
+  if(typeof setInterval==='function'&&D){
+    const timer=setInterval(()=>{
+      if(!D.hidden)loadRemote();
+    },45000);
+    if(timer&&typeof timer.unref==='function')timer.unref();
+  }
 }
 
 function probe(){
@@ -601,17 +745,38 @@ function probe(){
 
 async function startup(){
   markOwnBodyNodes();
-  if(typeof SB!=='undefined'&&SB&&SB.auth&&typeof SB.auth.getSession==='function'&&cfg.skipAdmin){
-    try{
-      const {data}=await SB.auth.getSession();
-      if(data&&data.session&&data.session.user&&!adminResolved){
-        await Promise.race([adminWaitPromise,new Promise(r=>setTimeout(r,1500))]);
-      }
-    }catch(e){}
+  const hasSignedUser=!!currentUserEmail();
+  if(typeof SB!=='undefined'&&SB&&SB.auth){
+    if(typeof SB.auth.onAuthStateChange==='function'){
+      try{
+        SB.auth.onAuthStateChange((ev,s)=>{
+          sessionEmail=(s&&s.user&&s.user.email)?normalizeEmail(s.user.email):'';
+          if(ev==='SIGNED_OUT')sessionEmail='';
+          evaluate();
+        });
+      }catch(e){}
+    }
+    if(typeof SB.auth.getSession==='function'&&(cfg.skipAdmin||hasSignedUser)){
+      try{
+        const {data}=await SB.auth.getSession();
+        if(data&&data.session&&data.session.user){
+          sessionEmail=normalizeEmail(data.session.user.email||'');
+          if(cfg.skipAdmin&&!adminResolved){
+            await Promise.race([adminWaitPromise,new Promise(r=>setTimeout(r,1500))]);
+          }
+        }
+      }catch(e){}
+    }
+  }
+  // If a signed-in user opens Nightreel on a fresh browser before remote config has ever cached,
+  // check remote site_config first (up to 1.2s) so ad-free accounts never get a first-visit flash of ads.
+  if(hasSignedUser&&!cached){
+    await Promise.race([loadRemote(),new Promise(r=>setTimeout(r,1200))]);
   }
   evaluate();
   await loadRemote();
   evaluate();
+  attachLiveSync();
 }
 
 function status(){
@@ -621,8 +786,12 @@ function status(){
   const smart=parseSmartlinkInput(cfg.smartUrl);
   const lastSl=typeof store!=='undefined'&&store&&store.get?Number(store.get('nr_ad_sl_ts',0))||0:0;
   const anyBlocked=['social','native','banner','preview'].some(k=>slots[k]&&slots[k].state==='blocked');
+  const userEmail=currentUserEmail();
   return {
-    cfg:{...cfg},
+    cfg:{...cfg,adFreeEmails:[...(cfg.adFreeEmails||[])]},
+    devicePaused,
+    userEmail,
+    userIsAdFree:!!(userEmail&&isAdFreeEmail(userEmail,cfg)),
     updatedAt,
     syncMode,
     remoteLoaded,
@@ -706,6 +875,9 @@ if(D){
 const API={
   DEFAULTS,
   SMART_MODES,
+  normalizeEmail,
+  isValidEmail,
+  parseEmailList,
   parseHttpsUrl,
   parseSocialInput,
   parseNativeInput,
@@ -714,9 +886,15 @@ const API={
   validateConfig,
   normalizeConfig,
   buildHtmlSnippet,
-  getConfig:()=>({...cfg}),
+  getConfig:()=>({...cfg,adFreeEmails:[...(cfg.adFreeEmails||[])]}),
   setConfig,
   saveConfig,
+  addAdFreeEmail,
+  removeAdFreeEmail,
+  isAdFreeEmail,
+  currentUserEmail,
+  getDevicePause,
+  setDevicePause,
   loadRemote,
   probe,
   evaluate,
@@ -728,7 +906,8 @@ const API={
   notifyAdmin,
   isKidsProfile,
   _onBannerEvent:onBannerEvent,
-  onStateChange:fn=>{listeners.add(fn);return ()=>listeners.delete(fn)}
+  onStateChange:fn=>{listeners.add(fn);return ()=>listeners.delete(fn)},
+  onRemoteSync:fn=>{remoteHooks.add(fn);return ()=>remoteHooks.delete(fn)}
 };
 
 G.NR_ADS=API;
