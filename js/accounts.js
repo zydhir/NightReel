@@ -101,7 +101,12 @@ function syncNow(){
   }catch(e){if(AUTH&&AUTH.id===user)SYNCO=false;console.warn('Nightreel sync failed:',e);return false}});return syncChain;
 }
 function queueSync(){if(!SB||!AUTH)return;SYNCO=false;clearTimeout(SYNCT);SYNCT=setTimeout(syncNow,2500)}
-function upPic(file,cb){const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{try{const s=128,cv=document.createElement('canvas');cv.width=cv.height=s;const x=cv.getContext('2d');x.fillStyle='#17141F';x.fillRect(0,0,s,s);const r=Math.max(s/im.width,s/im.height);x.drawImage(im,(s-im.width*r)/2,(s-im.height*r)/2,im.width*r,im.height*r);cb(cv.toDataURL('image/jpeg',.82))}catch(e){toast('Could not read that image','err')}};im.src=fr.result};fr.onerror=()=>toast('Could not read that image','err');fr.readAsDataURL(file)}
+function upPic(file,cb){
+  // Only real images, at most 8 MB. The picture is then redrawn as a small 128px JPEG,
+  // so nothing from the original file (scripts, metadata) is ever kept.
+  if(!file||!/^image\/(png|jpe?g|webp|gif|avif)$/i.test(file.type||''))return toast('Pick a PNG, JPG, WebP or GIF image','err');
+  if(file.size>8*1024*1024)return toast('That image is over 8 MB. Pick a smaller one','err');
+  const fr=new FileReader();fr.onload=()=>{const im=new Image();im.onload=()=>{try{const s=128,cv=document.createElement('canvas');cv.width=cv.height=s;const x=cv.getContext('2d');x.fillStyle='#17141F';x.fillRect(0,0,s,s);const r=Math.max(s/im.width,s/im.height);x.drawImage(im,(s-im.width*r)/2,(s-im.height*r)/2,im.width*r,im.height*r);cb(cv.toDataURL('image/jpeg',.82))}catch(e){toast('Could not read that image','err')}};im.src=fr.result};fr.onerror=()=>toast('Could not read that image','err');fr.readAsDataURL(file)}
 function authPage(){
   const arts=(L.trend||[]).filter(c=>c.b).slice(0,5);
   const left=`<div class="apl">${arts.map((c,i)=>`<div class="apbg" style="background-image:${art(c.i,1)};animation-delay:${(-i*9).toFixed(1)}s"></div>`).join('')}<div class="apc2"><a class="logo" href="#home">night<i>reel</i></a><p>Pick up any episode, on any device. Your list, ratings, notes and progress live in your account — not just this browser.</p><div class="apb"><span>${I('lock')} Syncs everywhere</span><span>${I('star')} Ratings &amp; notes</span><span>${I('clock')} Watch progress</span></div></div></div>`;

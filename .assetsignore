@@ -1,0 +1,12 @@
+# Files in the repo that should not be downloadable from the live site (Cloudflare Workers static assets).
+.git
+.gitignore
+.assetsignore
+tests
+README.md
+netlify.toml
+*.sql
+*.ps1
+*.bat
+*.env
+.env*

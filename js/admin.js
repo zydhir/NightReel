@@ -56,7 +56,8 @@ function dayBars(stamps,days,label){const now=new Date();now.setHours(0,0,0,0);c
   return `<div class="adm-vb" role="img" aria-label="${label} per day, last ${days} days, total ${b.reduce((a,v)=>a+v,0)}"><em class="adm-ymax">${mx}</em>${b.map((v,i)=>`<span data-tip="${lab(i)}: ${v} ${label}"><i style="height:${v?Math.max(4,v/mx*100):0}%"></i></span>`).join('')}</div>
 <div class="adm-vx"><span>${lab(0)}</span><span>${lab(Math.floor(days/2))}</span><span>Today</span></div>
 <details class="adm-tbl"><summary>Show as table</summary><table><thead><tr><th>Day</th><th>${label}</th></tr></thead><tbody>${b.map((v,i)=>`<tr><td>${lab(i)}</td><td>${v}</td></tr>`).reverse().join('')}</tbody></table></details>`}
-const poster=(t,badge)=>`<a class="adm-pt" href="#title-${t.mt}-${t.tid}" title="${esc(t.t)}">${t.p?`<img loading="lazy" alt="" src="https://image.tmdb.org/t/p/w154${t.p}">`:''}<b>${badge}</b><span>${esc(t.t)}</span></a>`;
+// Titles here come from each user's own synced data, so only well-formed values reach the page.
+const poster=(t,badge)=>{const mt=t.mt==='tv'?'tv':'movie',tid=/^\d{1,10}$/.test(String(t.tid))?t.tid:'0',p=/^\/[\w.-]{1,80}$/.test(String(t.p||''))?t.p:'';return `<a class="adm-pt" href="#title-${mt}-${tid}" title="${esc(t.t)}">${p?`<img loading="lazy" alt="" src="https://image.tmdb.org/t/p/w154${p}">`:''}<b>${badge}</b><span>${esc(t.t)}</span></a>`};
 // ---- tabs ----
 const TABS=[['overview','Overview','barChart'],['users','Users','users'],['content','Content','film'],['ads','Ads','dollar'],['announce','Announcement','megaphone'],['system','System','server']];
 function vOverview(g){const recent=[...g.users].sort((a,b)=>b.joined-a.joined).slice(0,6);

@@ -1,0 +1,10 @@
+# Security headers for every page and file (read by Cloudflare Workers static assets and Netlify).
+# Kept compatible with the ad network and the video players: no script/frame source limits here,
+# because those load from many changing hosts. Do not add a strict script-src without testing ads and playback.
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), interest-cohort=()
+  Content-Security-Policy: frame-ancestors 'self'; base-uri 'self'; object-src 'none'

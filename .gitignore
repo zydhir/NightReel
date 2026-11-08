@@ -10,3 +10,5 @@
 !/README.md
 !/netlify.toml
 !/.gitignore
+!/_headers
+!/.assetsignore

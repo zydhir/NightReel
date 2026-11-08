@@ -3,7 +3,7 @@ const rnd=i=>{const x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x)}
 const $=s=>document.querySelector(s);
 const mem={};
 const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return k in mem?mem[k]:d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){mem[k]=v}}};
-const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const KEY='acf09b7384dde461a7080bd7d53b852e';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 window.NR_LANG='en-US';try{localStorage.removeItem('nr_lang')}catch(e){}

@@ -123,7 +123,10 @@ async function roomPage(code){
   ch.on('presence',{event:'sync'},()=>{if(ROOM===R)roomSync()}).subscribe(st=>{if(ROOM!==R)return;R.status=st;if(st==='SUBSCRIBED')track();else if(st==='CHANNEL_ERROR'||st==='TIMED_OUT'){const m=$('#nrf-mem');if(m)m.innerHTML='<span class="nrf-wait err">Live connection failed. Check your internet and reload.</span>'}})}
 let trT=0;function track(){clearTimeout(trT);trT=setTimeout(()=>{const R=ROOM;if(!R||!R.ch||R.status!=='SUBSCRIBED')return;R.ch.track({n:gpName().slice(0,20),y:[...R.yes].slice(-300),c:R.count,r:R.round}).catch(()=>{})},150)}
 function roomSync(){const R=ROOM;if(!R||!R.ch)return;const st=R.ch.presenceState();
-  R.members=Object.entries(st).map(([k,a])=>({k,...(a[a.length-1]||{})}));const m=$('#nrf-mem');
+  // Presence data comes from other people's browsers: keep only the expected types and sizes.
+  const clean=p=>{p=p&&typeof p==='object'?p:{};const int=(v,max)=>{v=Math.floor(+v);return Number.isFinite(v)?Math.max(0,Math.min(max,v)):0};
+    return {n:typeof p.n==='string'?p.n.replace(/[\u0000-\u001f]/g,'').slice(0,20):'',c:int(p.c,100000),r:int(p.r,40),y:Array.isArray(p.y)?p.y.slice(-300).map(v=>int(v,1e9)).filter(Boolean):[]}};
+  R.members=Object.entries(st).slice(0,24).map(([k,a])=>({k:String(k).slice(0,40),...clean(a[a.length-1])}));const m=$('#nrf-mem');
   if(m)m.innerHTML=R.members.map(x=>`<span class="nrf-av${x.k===CID?' me':''}" title="${esc(x.n||'Guest')}"><i>${esc((x.n||'?').slice(0,1).toUpperCase())}</i>${esc(x.k===CID?'You':(x.n||'Guest'))}<small>${x.c||0}</small></span>`).join('')+(R.members.length<2?'<span class="nrf-wait">Waiting for friends. Share the link.</span>':'');
   if(R.members.length<2)return;
   const maxR=Math.max(...R.members.map(x=>x.r||0));if(maxR>R.round)loadRound(maxR);
