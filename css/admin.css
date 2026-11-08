@@ -72,6 +72,9 @@
 /* forms + checks */
 .adm-f{display:block;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mu);margin:0 0 14px}
 .adm-f textarea,.adm-f input{display:block;width:100%;margin-top:7px;padding:12px 14px;border-radius:12px;border:0;background:var(--fill);color:var(--tx);font:500 15px var(--fb);text-transform:none;letter-spacing:0;resize:vertical}
+#ads-social,#ads-native,#ads-banner,#ads-smart{font:500 12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#ads-side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.adm-code{margin:12px 0 0;padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.38);border:1px solid var(--line);color:#E5E2EE;font:500 12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
 .adm-checks{display:flex;flex-direction:column;gap:2px}
 .adm-chk{display:grid;grid-template-columns:118px 1fr;grid-template-rows:auto auto;column-gap:12px;padding:10px 4px;border-bottom:1px solid var(--line)}
 .adm-chk b{font-size:14px}.adm-chk small{grid-column:2;color:var(--mu);font-size:12.5px}
@@ -101,3 +104,15 @@
   .hc .go{flex-wrap:nowrap;gap:8px}
   .hc .go .btn{flex:1 1 auto;justify-content:center;padding:12px 10px;font-size:14px;white-space:nowrap;min-width:0}
 }
+
+/* Adsterra placements: Native Banner row, 160x300 Detail Sidebar Banner & Partner Smartlink */
+.nr-ad-native{margin:0 4vw;padding:0;border:0;background:none}
+.nr-ad-native[hidden]{display:none!important}
+.nr-ad-head{display:none;align-items:center;justify-content:space-between;margin-bottom:10px}
+.nr-ad-head span,.nr-ad-lbl{font:700 10.5px/1 var(--fb);letter-spacing:.09em;text-transform:uppercase;color:var(--mu)}
+.nr-ad-native.has-ad{margin:22px 4vw;padding:14px 18px 16px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.nr-ad-native.has-ad .nr-ad-head{display:flex}
+.nr-ad-box.nr-ad-160{margin-top:14px;padding:12px;border-radius:20px;background:var(--g);border:1px solid var(--gb);display:flex;flex-direction:column;align-items:center;gap:8px}
+.nr-ad-box[hidden]{display:none!important}
+.nr-ad-slink{border-color:rgba(139,123,255,.35)!important}
+@media (max-width:720px){.nr-ad-native.has-ad{margin:16px 4vw;padding:12px 14px;border-radius:16px}}
