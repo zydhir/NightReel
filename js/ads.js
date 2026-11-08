@@ -1,5 +1,5 @@
 // Nightreel · Adsterra integration (Social Bar, Native Banner, 160×300 Sidebar Banner & Smartlink) + viewer protections.
-// Configured out-of-the-box with Nightreel's Adsterra units and manageable live in #admin -> Ads (Supabase site_config key "ads").
+// Configured out-of-the-box with Nightreel's Adsterra units and manageable live in #admin -> Ads.
 (()=>{
 const G=typeof window!=='undefined'?window:globalThis;
 const D=typeof document!=='undefined'?document:null;
@@ -34,11 +34,9 @@ function escHtml(v){
 function cleanRaw(raw){
   let s=String(raw??'').trim();
   if(!s)return '';
-  // Unescape HTML entities if pasted from rich-text/markdown notes
   if(/&(?:lt|gt|quot|#39|amp);/i.test(s)){
     s=s.replace(/&lt;/gi,'<').replace(/&gt;/gi,'>').replace(/&quot;/gi,'"').replace(/&#39;/gi,"'").replace(/&amp;/gi,'&');
   }
-  // Unwrap markdown links like [https://example.com](https://example.com)
   s=s.replace(/\[(https?:\/\/[^\]\s]+)\]\((https?:\/\/[^)\s]+)\)/gi,'$1');
   return s.trim();
 }
@@ -85,7 +83,7 @@ function parseNativeInput(raw,fallbackContainerId=''){
   if(!u.ok)return {ok:false,src:'',containerId:'',host:'',error:u.error};
   const divMatch=/\bid\s*=\s*(?:"(container-[\w-]+)"|'(container-[\w-]+)')/i.exec(text);
   const keyMatch=/\/([a-f0-9]{32})(?:\/|$|\?|\.js)/i.exec(u.url);
-  let cid=(divMatch&&(divMatch[1]||divMatch[2]))||String(fallbackContainerId||'').trim()||(keyMatch?'container-'+keyMatch[1]:'');
+  const cid=(divMatch&&(divMatch[1]||divMatch[2]))||(keyMatch?'container-'+keyMatch[1]:'')||String(fallbackContainerId||'').trim();
   if(!cid||!/^container-[\w-]{4,80}$/.test(cid)){
     return {ok:false,src:'',containerId:'',host:'',error:'Could not detect a container-… ID. Paste the full Native Banner snippet including <div id="container-…"></div>.'};
   }
@@ -119,6 +117,19 @@ function parseSmartlinkInput(raw){
   const hrefMatch=/\bhref\s*=\s*(?:"([^"]+)"|'([^']+)')/i.exec(text);
   const u=parseHttpsUrl(hrefMatch?(hrefMatch[1]||hrefMatch[2]):text);
   return u.ok?u:{ok:false,url:'',host:'',error:u.error};
+}
+
+function validateConfig(draft){
+  const d=(draft&&typeof draft==='object')?draft:{};
+  const soc=parseSocialInput(d.socialSrc);
+  const nat=parseNativeInput(d.nativeSrc,d.nativeContainerId);
+  const ban=parseBannerInput(d.bannerSrc,{key:d.bannerKey,width:d.bannerWidth,height:d.bannerHeight});
+  const sl=parseSmartlinkInput(d.smartUrl);
+  if(d.socialOn&&!soc.ok)return {ok:false,field:'social',error:'Social Bar: '+soc.error};
+  if(d.nativeOn&&!nat.ok)return {ok:false,field:'native',error:'Native Banner: '+nat.error};
+  if(d.bannerOn&&!ban.ok)return {ok:false,field:'banner',error:'160×300 Banner: '+ban.error};
+  if(d.smartMode!=='off'&&!sl.ok)return {ok:false,field:'smart',error:'Smartlink: '+sl.error};
+  return {ok:true,soc,nat,ban,sl};
 }
 
 function normalizeConfig(raw,base=DEFAULTS){
@@ -178,10 +189,15 @@ function buildHtmlSnippet(rawCfg){
   return out.join('\n\n');
 }
 
+function isAdConfigObj(v){
+  return !!(v&&typeof v==='object'&&('socialSrc' in v||'nativeSrc' in v||'bannerSrc' in v||'smartUrl' in v));
+}
+
 // ---- Runtime state ----
 const cached=typeof store!=='undefined'&&store&&store.get?store.get('nr_ads_cfg_v2',null):null;
 let cfg=normalizeConfig(cached&&cached.value?cached.value:null,DEFAULTS);
 let updatedAt=(cached&&cached.updated_at)||'';
+let syncMode=cached&&cached.syncMode?cached.syncMode:'default';
 let remoteLoaded=false;
 let adminResolved=false;
 let resolveAdminWait=null;
@@ -190,14 +206,22 @@ let detailBannerTimer=0;
 const listeners=new Set();
 
 const slots={
-  social:{state:'idle',src:'',host:''},
-  native:{state:'idle',src:'',host:''},
-  banner:{state:'idle',src:'',host:''},
+  social:{state:'idle',src:'',host:'',filled:null},
+  native:{state:'idle',src:'',host:'',filled:null},
+  banner:{state:'idle',src:'',host:'',filled:null},
+  preview:{state:'idle',src:'',host:'',filled:null},
   smart:{opens:0}
 };
 
 function emit(){
   listeners.forEach(fn=>{try{fn()}catch(e){}});
+}
+
+function markOwnBodyNodes(){
+  if(!D||!D.body||!D.body.children)return;
+  for(const el of [...D.body.children]){
+    if(el.dataset)el.dataset.nrOwn='1';
+  }
 }
 
 function currentRoute(){
@@ -230,7 +254,7 @@ function gateReason(){
   return {ok:true,code:'active',reason:'Active on this page'};
 }
 
-// ---- Persistent Native Banner DOM management ----
+// ---- Stationary Native Banner (never moved in the DOM so dynamic iframes stay alive) ----
 let nativeObserverAttached=false;
 function getNativeSection(){
   if(!D)return null;
@@ -240,68 +264,63 @@ function getNativeSection(){
     sec.id='nr-native-ad';
     sec.className='nr-ad-native';
     sec.setAttribute('aria-label','Sponsored');
+    sec.dataset.nrOwn='1';
     sec.hidden=true;
-    sec.innerHTML='<div class="nr-ad-head"><span>Sponsored</span></div><div></div>';
-    const ft=D.querySelector('footer');
-    if(ft&&ft.parentNode)ft.parentNode.insertBefore(sec,ft);
+    sec.innerHTML='<div class="nr-ad-head"><span>Sponsored</span><a class="nr-ad-hlink" id="nr-native-slink" target="_blank" rel="noopener noreferrer sponsored" hidden>Partner offer ↗</a></div><div></div>';
+    const app=D.getElementById('app');
+    if(app&&app.parentNode)app.parentNode.insertBefore(sec,app);
     else D.body.appendChild(sec);
   }
   return sec;
 }
 
-function parkNative(){
-  const sec=getNativeSection();
-  if(!sec||!D)return;
-  const app=D.getElementById('app');
-  if(app&&app.contains(sec)&&app.parentNode){
-    app.parentNode.insertBefore(sec,app.nextSibling);
-  }
-}
-
-function dockNative(){
+function syncNative(){
   const sec=getNativeSection();
   if(!sec||!D)return;
   const gate=gateReason();
   const nat=parseNativeInput(cfg.nativeSrc,cfg.nativeContainerId);
   if(!gate.ok||!cfg.nativeOn||!nat.ok||!nat.src){
-    parkNative();
     sec.hidden=true;
     return;
   }
-  // Ensure inner container ID matches configured Adsterra container ID
+
+  // Update optional Partner offer link in the Sponsored header
+  const sl=parseSmartlinkInput(cfg.smartUrl);
+  const hlink=D.getElementById('nr-native-slink');
+  if(hlink){
+    if(cfg.smartMode!=='off'&&sl.ok&&sl.url){
+      hlink.href=sl.url;
+      hlink.hidden=false;
+    }else{
+      hlink.hidden=true;
+    }
+  }
+
   let inner=sec.lastElementChild;
   if(!inner||inner.classList?.contains('nr-ad-head')){
     inner=D.createElement('div');
     sec.appendChild(inner);
   }
+  const srcChanged=slots.native.src&&slots.native.src!==nat.src;
+  if(srcChanged)inner.innerHTML='';
   if(inner.id!==nat.containerId)inner.id=nat.containerId;
-  const syncFilled=()=>sec.classList.toggle('has-ad',inner.children&&inner.children.length>0);
-  syncFilled();
+
+  const checkFilled=()=>{
+    const hasNodes=!!(inner.children&&inner.children.length>0);
+    sec.classList.toggle('has-ad',hasNodes);
+    if(slots.native.state==='loaded')slots.native.filled=hasNodes;
+  };
+
+  // Unhide BEFORE script injection so Adsterra measures real container width
+  sec.hidden=false;
+  checkFilled();
+
   if(!nativeObserverAttached&&typeof MutationObserver!=='undefined'){
     nativeObserverAttached=true;
-    new MutationObserver(syncFilled).observe(inner,{childList:true,subtree:true});
+    new MutationObserver(()=>{checkFilled();emit()}).observe(inner,{childList:true,subtree:true});
   }
 
-  // On Home (once catalog has loaded and not searching), place right after "Browse by mood" (or 3rd row) for high visibility
-  const route=currentRoute();
-  const app=D.getElementById('app');
-  const searching=typeof q!=='undefined'&&!!q;
-  const homeReady=typeof LD==='undefined'?true:!!LD;
-  if(route==='home'&&!searching&&homeReady&&app){
-    const tiles=app.querySelector('.tiles');
-    const moodRow=tiles&&tiles.closest?tiles.closest('.row'):null;
-    const rows=app.querySelectorAll?app.querySelectorAll('.row'):[];
-    const anchor=moodRow||(rows.length>=3?rows[2]:null);
-    if(anchor&&anchor.parentNode){
-      anchor.parentNode.insertBefore(sec,anchor.nextSibling);
-    }else parkNative();
-  }else{
-    parkNative();
-  }
-  sec.hidden=false;
-
-  // Inject Native Banner script once (after container is unhidden so width measurement succeeds)
-  if(slots.native.src!==nat.src||(slots.native.state!=='loading'&&slots.native.state!=='loaded')){
+  if(srcChanged||slots.native.src!==nat.src||(slots.native.state!=='loading'&&slots.native.state!=='loaded')){
     const existing=D.querySelector('script[data-nr-ad="native"]');
     if(existing)existing.remove();
     const s=D.createElement('script');
@@ -309,9 +328,20 @@ function dockNative(){
     s.setAttribute('async','async');
     s.setAttribute('data-cfasync','false');
     s.dataset.nrAd='native';
-    slots.native={state:'loading',src:nat.src,host:nat.host};
-    s.onload=()=>{slots.native.state='loaded';syncFilled();emit()};
-    s.onerror=()=>{slots.native.state='blocked';sec.classList.remove('has-ad');emit()};
+    slots.native={state:'loading',src:nat.src,host:nat.host,filled:null};
+    s.onload=()=>{
+      slots.native.state='loaded';
+      checkFilled();
+      emit();
+      setTimeout(()=>{checkFilled();emit()},1200);
+      setTimeout(()=>{checkFilled();emit()},3200);
+    };
+    s.onerror=()=>{
+      slots.native.state='blocked';
+      slots.native.filled=false;
+      sec.classList.remove('has-ad');
+      emit();
+    };
     s.src=nat.src;
     (D.body||D.head).appendChild(s);
   }
@@ -331,22 +361,41 @@ function syncSocial(){
   s.async=true;
   s.setAttribute('data-cfasync','false');
   s.dataset.nrAd='social';
-  slots.social={state:'loading',src:soc.src,host:soc.host};
-  s.onload=()=>{slots.social.state='loaded';emit()};
-  s.onerror=()=>{slots.social.state='blocked';emit()};
+  slots.social={state:'loading',src:soc.src,host:soc.host,filled:null};
+  s.onload=()=>{slots.social.state='loaded';slots.social.filled=true;emit()};
+  s.onerror=()=>{slots.social.state='blocked';slots.social.filled=false;emit()};
   s.src=soc.src;
   (D.body||D.head).appendChild(s);
 }
 
-// ---- Title Detail: 160×300 Sidebar Banner & Partner Smartlink ----
-function renderBannerBox(aside,ban){
-  if(!D||!aside||aside.querySelector('.nr-ad-160'))return;
+// ---- 160×300 Banner via same-origin streaming ad-banner.html ----
+let bannerSeq=0;
+function onBannerEvent(slotName,state,filled){
+  const key=slotName==='preview'?'preview':'banner';
+  const ban=parseBannerInput(cfg.bannerSrc,{key:cfg.bannerKey,width:cfg.bannerWidth,height:cfg.bannerHeight});
+  slots[key]={
+    state:state==='blocked'?'blocked':'loaded',
+    src:ban.src,
+    host:ban.host,
+    filled:filled===undefined?slots[key].filled:filled
+  };
+  if(key==='banner'&&D){
+    const box=D.querySelector('#md .nr-ad-160');
+    if(box&&(state==='blocked'||filled===false))box.hidden=true;
+    else if(box&&filled===true)box.hidden=false;
+  }
+  emit();
+}
+
+function renderBannerBox(container,ban,slotName='detail'){
+  if(!D||!container)return null;
+  if(slotName==='detail'&&container.querySelector('.nr-ad-160'))return container.querySelector('.nr-ad-160');
   const box=D.createElement('div');
-  box.className='nr-ad-box nr-ad-160';
+  box.className='nr-ad-box nr-ad-160'+(slotName==='preview'?' nr-ad-prev':'');
   box.setAttribute('aria-label','Sponsored');
   const lbl=D.createElement('span');
   lbl.className='nr-ad-lbl';
-  lbl.textContent='Sponsored';
+  lbl.textContent=slotName==='preview'?'Live 160×300 preview':'Sponsored';
   box.appendChild(lbl);
 
   const frame=D.createElement('iframe');
@@ -355,24 +404,23 @@ function renderBannerBox(aside,ban){
   frame.title='Sponsored advertisement';
   frame.setAttribute('scrolling','no');
   frame.setAttribute('frameborder','0');
+  frame.setAttribute('referrerpolicy','no-referrer-when-downgrade');
   frame.style.cssText=`width:${ban.width}px;height:${ban.height}px;border:0;overflow:hidden;display:block;border-radius:10px`;
+  const targetSlot=slotName==='preview'?'preview':'banner';
+  slots[targetSlot]={state:'loading',src:ban.src,host:ban.host,filled:null};
+  frame.src=`ad-banner.html?slot=${encodeURIComponent(slotName)}&seq=${++bannerSeq}`;
   box.appendChild(frame);
-  aside.appendChild(box);
+  container.appendChild(box);
+  return box;
+}
 
-  slots.banner={state:'loading',src:ban.src,host:ban.host};
-  G.__nrAdBannerState=ok=>{
-    slots.banner.state=ok?'loaded':'blocked';
-    if(!ok)box.hidden=true;
-    emit();
-  };
-
-  const optsJson=JSON.stringify({key:ban.key,format:'iframe',height:ban.height,width:ban.width,params:{}});
-  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><style>html,body{margin:0;padding:0;width:${ban.width}px;height:${ban.height}px;overflow:hidden;background:transparent}</style></head><body><script>window.atOptions=${optsJson};<\/script><script data-cfasync="false" src="${escHtml(ban.src)}" onload="parent.__nrAdBannerState&&parent.__nrAdBannerState(1)" onerror="parent.__nrAdBannerState&&parent.__nrAdBannerState(0)"><\/script></body></html>`;
-  try{
-    const doc=frame.contentDocument||(frame.contentWindow&&frame.contentWindow.document);
-    if(doc){doc.open();doc.write(html);doc.close();return}
-  }catch(e){}
-  frame.srcdoc=html;
+function mountBannerPreview(container){
+  if(!D||!container)return false;
+  container.innerHTML='';
+  const ban=parseBannerInput(cfg.bannerSrc,{key:cfg.bannerKey,width:cfg.bannerWidth,height:cfg.bannerHeight});
+  if(!ban.ok||!ban.src)return false;
+  renderBannerBox(container,ban,'preview');
+  return true;
 }
 
 function mountDetailAds(id,keep){
@@ -383,7 +431,7 @@ function mountDetailAds(id,keep){
   const aside=D.querySelector('#md .ov2 aside');
   if(!aside)return;
 
-  // 1. Subtle partner Smartlink inside "Look it up" links
+  // 1. Partner Smartlink inside "Look it up" links
   const sl=parseSmartlinkInput(cfg.smartUrl);
   if(cfg.smartMode!=='off'&&sl.ok&&sl.url&&!aside.querySelector('.nr-ad-slink')){
     const linksBox=aside.querySelector('.v3links');
@@ -392,32 +440,33 @@ function mountDetailAds(id,keep){
     if(linksBox&&linksBox.insertAdjacentHTML)linksBox.insertAdjacentHTML('beforeend',linkHtml);
   }
 
-  // 2. 160×300 Banner inside aside (wait briefly if hyd(id) is about to re-render #md)
+  // 2. 160×300 Banner inside aside (if hyd(id) is fetching TMDB details, hyd() will call detail(id,1) shortly)
   const ban=parseBannerInput(cfg.bannerSrc,{key:cfg.bannerKey,width:cfg.bannerWidth,height:cfg.bannerHeight});
   if(!cfg.bannerOn||!ban.ok||!ban.src)return;
   const c=(typeof C!=='undefined'&&Array.isArray(C))?C[id]:null;
   if(c&&!c.v3&&!keep){
     detailBannerTimer=setTimeout(()=>{
       const a2=D.querySelector('#md .ov2 aside');
-      if(a2&&gateReason().ok)renderBannerBox(a2,ban);
-    },550);
+      if(a2&&gateReason().ok)renderBannerBox(a2,ban,'detail');
+    },1800);
     return;
   }
-  renderBannerBox(aside,ban);
+  renderBannerBox(aside,ban,'detail');
 }
 
 // ---- Play-click Smartlink (frequency-capped) ----
-function triggerPlaySmartlink(){
-  const gate=gateReason();
-  if(!gate.ok||cfg.smartMode!=='play')return false;
+function triggerPlaySmartlink(force=false){
   const sl=parseSmartlinkInput(cfg.smartUrl);
   if(!sl.ok||!sl.url)return false;
-  if(typeof me==='function'&&!me())return false;
-  const capMs=Math.max(1,Number(cfg.smartCapHours)||12)*3600*1000;
-  const last=typeof store!=='undefined'&&store&&store.get?Number(store.get('nr_ad_sl_ts',0))||0:0;
-  const now=Date.now();
-  if(now-last<capMs)return false;
-  if(typeof store!=='undefined'&&store&&store.set)store.set('nr_ad_sl_ts',now);
+  if(!force){
+    const gate=gateReason();
+    if(!gate.ok||cfg.smartMode!=='play')return false;
+    const capMs=Math.max(1,Number(cfg.smartCapHours)||12)*3600*1000;
+    const last=typeof store!=='undefined'&&store&&store.get?Number(store.get('nr_ad_sl_ts',0))||0:0;
+    const now=Date.now();
+    if(now-last<capMs)return false;
+    if(typeof store!=='undefined'&&store&&store.set)store.set('nr_ad_sl_ts',now);
+  }
   slots.smart.opens++;
   try{if(typeof G.open==='function')G.open(sl.url,'_blank','noopener,noreferrer')}catch(e){}
   emit();
@@ -426,37 +475,132 @@ function triggerPlaySmartlink(){
 
 function evaluate(){
   syncSocial();
-  dockNative();
+  syncNative();
   emit();
   return gateReason();
 }
 
-function setConfig(nextCfg,stamp){
+function setConfig(nextCfg,stamp,mode){
   cfg=normalizeConfig(nextCfg,DEFAULTS);
   if(stamp!==undefined)updatedAt=stamp||'';
+  if(mode)syncMode=mode;
   if(typeof store!=='undefined'&&store&&store.set){
-    store.set('nr_ads_cfg_v2',{value:cfg,updated_at:updatedAt});
+    store.set('nr_ads_cfg_v2',{value:cfg,updated_at:updatedAt,syncMode});
   }
   evaluate();
   return cfg;
 }
 
-async function loadRemote(){
-  if(typeof SB==='undefined'||!SB)return cfg;
+// Saves immediately to local browser state AND syncs to Supabase site_config
+// (supports both dedicated key='ads' and fallback inside key='announcement' if site_config has a key check constraint).
+async function saveConfig(nextCfg,opts={}){
+  const v=validateConfig(nextCfg);
+  if(!v.ok)return {ok:false,error:v.error,field:v.field};
+  const clean=normalizeConfig(nextCfg,DEFAULTS);
+  const stamp=opts.stamp||new Date().toISOString();
+  setConfig(clean,stamp,'local');
+
+  if(typeof SB==='undefined'||!SB||!SB.from){
+    return {ok:true,cfg:clean,synced:false,syncMode:'local',remoteError:'Supabase client unavailable'};
+  }
+
+  let firstErr='';
   try{
-    const {data,error}=await SB.from('site_config').select('value,updated_at').eq('key','ads').maybeSingle();
+    const {error}=await SB.from('site_config').upsert({key:'ads',value:clean,updated_at:stamp});
+    if(!error){
+      setConfig(clean,stamp,'ads');
+      return {ok:true,cfg:clean,synced:true,syncMode:'ads'};
+    }
+    firstErr=error.message||'Could not write key=ads';
+  }catch(e){
+    firstErr=(e&&e.message)||'Could not write key=ads';
+  }
+
+  // Fallback: embed ads config inside the permitted 'announcement' row without altering banner visibility
+  try{
+    let annBase=(opts.ann&&typeof opts.ann==='object')?{...opts.ann}:null;
+    let annStamp='';
+    if(!annBase){
+      const cur=await SB.from('site_config').select('value,updated_at').eq('key','announcement').maybeSingle();
+      if(!cur.error&&cur.data&&cur.data.value&&typeof cur.data.value==='object'){
+        annBase={...cur.data.value};
+        annStamp=cur.data.updated_at||'';
+      }
+    }
+    const base=annBase||{text:'',link:'',kind:'info',active:false};
+    const merged={
+      text:base.text||'',
+      link:base.link||'',
+      kind:base.kind||'info',
+      active:!!base.active,
+      ads:clean,
+      ads_updated_at:stamp
+    };
+    const {error:err2}=await SB.from('site_config').upsert({
+      key:'announcement',
+      value:merged,
+      updated_at:annStamp||stamp
+    });
+    if(!err2){
+      setConfig(clean,stamp,'announcement');
+      return {ok:true,cfg:clean,synced:true,syncMode:'announcement',annValue:merged};
+    }
+    return {ok:true,cfg:clean,synced:false,syncMode:'local',remoteError:err2.message||firstErr};
+  }catch(e){
+    return {ok:true,cfg:clean,synced:false,syncMode:'local',remoteError:(e&&e.message)||firstErr};
+  }
+}
+
+async function loadRemote(){
+  if(typeof SB==='undefined'||!SB||!SB.from)return cfg;
+  try{
+    let rows=[];
+    const tbl=SB.from('site_config').select('key,value,updated_at');
+    if(tbl&&typeof tbl.in==='function'){
+      const {data,error}=await tbl.in('key',['ads','announcement']);
+      if(!error&&Array.isArray(data))rows=data;
+    }else if(tbl&&typeof tbl.eq==='function'){
+      const {data,error}=await tbl.eq('key','ads').maybeSingle();
+      if(!error&&data)rows=[{key:'ads',...data}];
+    }
     remoteLoaded=true;
-    if(!error&&data&&data.value&&typeof data.value==='object'){
-      // Only apply remote config if it matches our Adsterra schema (or has active explicitly saved)
-      if('socialSrc' in data.value||'nativeSrc' in data.value||'bannerSrc' in data.value||'smartUrl' in data.value){
-        setConfig(data.value,data.updated_at||'');
+
+    let bestCfg=null,bestStamp='',bestTs=0,bestMode='';
+    for(const r of rows){
+      if(!r||!r.value||typeof r.value!=='object')continue;
+      if((r.key==='ads'||!r.key)&&isAdConfigObj(r.value)){
+        const st=r.updated_at||'';
+        const ts=Date.parse(st)||1;
+        if(ts>=bestTs){bestTs=ts;bestCfg=r.value;bestStamp=st;bestMode='ads'}
+      }else if(r.key==='announcement'&&isAdConfigObj(r.value.ads)){
+        const st=r.value.ads_updated_at||r.updated_at||'';
+        const ts=Date.parse(st)||1;
+        if(ts>=bestTs){bestTs=ts;bestCfg=r.value.ads;bestStamp=st;bestMode='announcement'}
+      }
+    }
+
+    if(bestCfg){
+      const localTs=updatedAt?(Date.parse(updatedAt)||0):0;
+      if(!localTs||bestTs>=localTs){
+        setConfig(bestCfg,bestStamp,bestMode);
       }
     }
   }catch(e){}
   return cfg;
 }
 
+function probe(){
+  for(const k of ['social','native','banner','preview']){
+    if(slots[k]&&slots[k].state==='blocked'){
+      slots[k]={state:'idle',src:'',host:'',filled:null};
+    }
+  }
+  evaluate();
+  return status();
+}
+
 async function startup(){
+  markOwnBodyNodes();
   if(typeof SB!=='undefined'&&SB&&SB.auth&&typeof SB.auth.getSession==='function'&&cfg.skipAdmin){
     try{
       const {data}=await SB.auth.getSession();
@@ -476,10 +620,13 @@ function status(){
   const banner=parseBannerInput(cfg.bannerSrc,{key:cfg.bannerKey,width:cfg.bannerWidth,height:cfg.bannerHeight});
   const smart=parseSmartlinkInput(cfg.smartUrl);
   const lastSl=typeof store!=='undefined'&&store&&store.get?Number(store.get('nr_ad_sl_ts',0))||0:0;
+  const anyBlocked=['social','native','banner','preview'].some(k=>slots[k]&&slots[k].state==='blocked');
   return {
     cfg:{...cfg},
     updatedAt,
+    syncMode,
     remoteLoaded,
+    anyBlocked,
     social,
     native,
     banner,
@@ -490,6 +637,7 @@ function status(){
       social:{...slots.social},
       native:{...slots.native},
       banner:{...slots.banner},
+      preview:{...slots.preview},
       smart:{...slots.smart}
     }
   };
@@ -511,7 +659,10 @@ if(D){
   if(typeof render==='function'){
     const _render=render;
     render=function(){
-      parkNative();
+      if(currentRoute()!=='home'||(typeof q!=='undefined'&&q)){
+        const ht=D.getElementById('nr-home-top');
+        if(ht)ht.innerHTML='';
+      }
       const r=_render.apply(this,arguments);
       evaluate();
       return r;
@@ -537,11 +688,18 @@ if(D){
     D.addEventListener('click',e=>{
       if(e.isTrusted===false)return;
       const playBtn=e.target&&e.target.closest&&e.target.closest('[data-a="play"]');
-      if(playBtn)triggerPlaySmartlink();
+      if(playBtn)triggerPlaySmartlink(false);
     });
   }
   if(G.addEventListener){
     G.addEventListener('hashchange',()=>evaluate());
+    G.addEventListener('message',ev=>{
+      if(!G.location||ev.origin!==G.location.origin)return;
+      const d=ev.data;
+      if(d&&typeof d==='object'&&d.type==='nr-ad-banner'){
+        onBannerEvent(d.slot,d.state,d.filled);
+      }
+    });
   }
 }
 
@@ -553,18 +711,23 @@ const API={
   parseNativeInput,
   parseBannerInput,
   parseSmartlinkInput,
+  validateConfig,
   normalizeConfig,
   buildHtmlSnippet,
   getConfig:()=>({...cfg}),
   setConfig,
+  saveConfig,
   loadRemote,
+  probe,
   evaluate,
   mountDetailAds,
+  mountBannerPreview,
   triggerPlaySmartlink,
   resetSmartlinkCap,
   status,
   notifyAdmin,
   isKidsProfile,
+  _onBannerEvent:onBannerEvent,
   onStateChange:fn=>{listeners.add(fn);return ()=>listeners.delete(fn)}
 };
 

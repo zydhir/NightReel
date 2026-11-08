@@ -80,7 +80,7 @@ const _a=acct;acct=function(){_a.apply(this,arguments);applyTheme();const m=$('#
 function after(){const r=location.hash.slice(1)||'home';
   if(q){searchChips();tag($('#gr'))}else{delete D.body.dataset.sf;if(r==='home')newEps()}}
 const _r=render;render=function(){const r=location.hash.slice(1);
-  if(r==='stats'&&!q){SEEN.clear();GR=null;io.disconnect();D.querySelectorAll('#nl a,.dp a').forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#stats'));const a=$('#app');a.innerHTML=statsPage();a.classList.remove('pgin');void a.offsetWidth;a.classList.add('pgin');delete D.body.dataset.sf;return}
+  if(r==='stats'&&!q){SEEN.clear();GR=null;io.disconnect();const ht=$('#nr-home-top');if(ht)ht.innerHTML='';D.querySelectorAll('#nl a,.dp a').forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#stats'));const a=$('#app');a.innerHTML=statsPage();a.classList.remove('pgin');void a.offsetWidth;a.classList.add('pgin');delete D.body.dataset.sf;return}
   _r.apply(this,arguments);after()};
 // ---- events ----
 D.addEventListener('click',e=>{const b=e.target.closest('[data-v3sf]');if(!b)return;SF=b.dataset.v3sf;D.body.dataset.sf=SF;D.querySelectorAll('[data-v3sf]').forEach(x=>{const on=x.dataset.v3sf===SF;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on)});tag($('#gr'))});
