@@ -73,13 +73,19 @@
 .adm-f{display:block;font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mu);margin:0 0 14px}
 .adm-f textarea,.adm-f input{display:block;width:100%;margin-top:7px;padding:12px 14px;border-radius:12px;border:0;background:var(--fill);color:var(--tx);font:500 15px var(--fb);text-transform:none;letter-spacing:0;resize:vertical}
 #ads-social,#ads-native,#ads-banner,#ads-smart{font:500 12.5px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-#ads-side{display:flex;flex-direction:column;gap:14px;min-width:0}
+#ads-side,#ads-status-cards{display:flex;flex-direction:column;gap:14px;min-width:0}
 .adm-code{margin:12px 0 0;padding:12px 14px;border-radius:12px;background:rgba(0,0,0,.38);border:1px solid var(--line);color:#E5E2EE;font:500 12px/1.55 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-x:auto;white-space:pre-wrap;word-break:break-all}
 .adm-checks{display:flex;flex-direction:column;gap:2px}
 .adm-chk{display:grid;grid-template-columns:118px 1fr;grid-template-rows:auto auto;column-gap:12px;padding:10px 4px;border-bottom:1px solid var(--line)}
 .adm-chk b{font-size:14px}.adm-chk small{grid-column:2;color:var(--mu);font-size:12.5px}
 .adm-st{grid-row:span 2;display:inline-flex;align-items:center;gap:6px;align-self:center;font-size:12.5px;font-weight:700}.adm-st .nri{width:15px;height:15px}
-.adm-chk.good .adm-st{color:#30D158}.adm-chk.warn .adm-st{color:#FFD60A}.adm-chk.bad .adm-st{color:#FF6B6B}.adm-chk.run .adm-st{color:var(--mu)}
+.adm-chk.good .adm-st{color:#30D158}.adm-chk.warn .adm-st{color:#FFD60A}.adm-chk.bad .adm-st{color:#FF6B6B}.adm-chk.run .adm-st,.adm-chk.muted .adm-st{color:var(--mu)}
+.adm-ad-alert{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;padding:12px 14px;border-radius:14px;background:rgba(255,214,10,.09);border:1px solid rgba(255,214,10,.36);color:#F7F3E3}
+.adm-ad-alert>.nri{width:18px;height:18px;color:#FFD60A;flex:none;margin-top:2px}
+.adm-ad-alert b{display:block;font-size:13.5px;margin-bottom:3px;color:#FFD60A}
+.adm-ad-alert small{display:block;font-size:12.5px;line-height:1.45;color:#DFDCE8}
+.adm-prev-stage{display:flex;justify-content:center;align-items:center;min-height:120px;padding:10px;border-radius:16px;background:rgba(0,0,0,.28);border:1px dashed var(--line)}
+.adm-prev-stage .nr-ad-box.nr-ad-160{margin:0}
 .adm-steps{margin:0 0 14px;padding-left:20px;line-height:1.7;color:#DCD8E6}.adm-steps li{margin:6px 0}.adm-steps a{color:var(--c)}
 .adm-gate>div[aria-hidden] .nri{width:34px;height:34px;color:var(--a)}
 #adm-tip{position:fixed;z-index:90;pointer-events:none;padding:6px 10px;border-radius:10px;background:rgba(20,20,28,.94);border:1px solid var(--glb);color:var(--tx);font:600 12.5px var(--fb);white-space:nowrap;box-shadow:0 10px 24px rgba(0,0,0,.5)}
@@ -108,11 +114,25 @@
 /* Adsterra placements: Native Banner row, 160x300 Detail Sidebar Banner & Partner Smartlink */
 .nr-ad-native{margin:0 4vw;padding:0;border:0;background:none}
 .nr-ad-native[hidden]{display:none!important}
-.nr-ad-head{display:none;align-items:center;justify-content:space-between;margin-bottom:10px}
+.nr-ad-head{display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .nr-ad-head span,.nr-ad-lbl{font:700 10.5px/1 var(--fb);letter-spacing:.09em;text-transform:uppercase;color:var(--mu)}
-.nr-ad-native.has-ad{margin:22px 4vw;padding:14px 18px 16px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
+.nr-ad-hlink{font:600 11.5px/1 var(--fb);color:var(--mu);text-decoration:none;padding:4px 9px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04);transition:color .2s,border-color .2s}
+.nr-ad-hlink:hover{color:var(--tx);border-color:rgba(139,123,255,.45)}
+.nr-ad-native.has-ad{margin:22px 4vw 8px;padding:14px 18px 16px;border-radius:20px;background:rgba(255,255,255,.04);border:1px solid var(--line)}
 .nr-ad-native.has-ad .nr-ad-head{display:flex}
+/* On non-Home routes (#nr-home-top is empty), give top clearance below the fixed navbar when an ad fills */
+#nr-home-top:empty+.nr-ad-native.has-ad:not([hidden]){margin-top:calc(88px + env(safe-area-inset-top,0px));margin-bottom:0}
+#nr-home-top:empty+.nr-ad-native.has-ad:not([hidden])+#app>.pg{padding-top:22px}
+/* Appearance: when Home hero banner is hidden by user preference */
+html[data-hero="off"] #nr-home-top:has(>.hero)+.nr-ad-native:not(.has-ad)+#app,
+html[data-hero="off"] #nr-home-top:has(>.hero)+.nr-ad-native[hidden]+#app{padding-top:calc(86px + env(safe-area-inset-top,0px))}
+html[data-hero="off"] #nr-home-top:has(>.hero)+.nr-ad-native.has-ad:not([hidden]){margin-top:calc(88px + env(safe-area-inset-top,0px))}
 .nr-ad-box.nr-ad-160{margin-top:14px;padding:12px;border-radius:20px;background:var(--g);border:1px solid var(--gb);display:flex;flex-direction:column;align-items:center;gap:8px}
 .nr-ad-box[hidden]{display:none!important}
 .nr-ad-slink{border-color:rgba(139,123,255,.35)!important}
-@media (max-width:720px){.nr-ad-native.has-ad{margin:16px 4vw;padding:12px 14px;border-radius:16px}}
+/* Hide any dynamically injected floating Social Bar widgets on protected pages or when paused */
+body.nr-ads-paused>:not([data-nr-own],.ovl,.pf2,[data-a],#nr-ann-wrap,#adm-drawer-root,#adm-tip,#nrpop,#hpv,#ntf,#tabbar,#v3top,#sp,#splash,script,link,style){display:none!important}
+@media (max-width:720px){
+  .nr-ad-native.has-ad{margin:16px 4vw 6px;padding:12px 14px;border-radius:16px}
+  #nr-home-top:empty+.nr-ad-native.has-ad:not([hidden]){margin-top:calc(78px + env(safe-area-inset-top,0px))}
+}

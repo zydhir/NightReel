@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sponsored</title>
+<style>
+  html,body{margin:0;padding:0;background:transparent;overflow:hidden;display:flex;align-items:center;justify-content:center;min-height:100%}
+  iframe{border:0;display:block}
+</style>
+</head>
+<body>
+<script data-cfasync="false">
+(function(){
+  var DEF={
+    src:'https://bancadeltempoidea.org/22/17b8ed40c10ad08c3e5561c0f9f32bb8',
+    key:'17b8ed40c10ad08c3e5561c0f9f32bb8',
+    width:160,
+    height:300
+  };
+  var qs=new URLSearchParams(location.search||'');
+  var slot=qs.get('slot')==='preview'?'preview':'detail';
+
+  function notify(state,filled){
+    var payload={type:'nr-ad-banner',slot:slot,state:state,filled:filled};
+    try{
+      if(window.parent&&window.parent!==window){
+        if(window.parent.NR_ADS&&typeof window.parent.NR_ADS._onBannerEvent==='function'){
+          window.parent.NR_ADS._onBannerEvent(slot,state,filled);
+        }
+        window.parent.postMessage(payload,location.origin);
+      }
+    }catch(e){}
+  }
+
+  // Read config strictly from same-origin parent/storage (never from external query params)
+  var raw=null;
+  try{
+    if(window.parent&&window.parent!==window&&window.parent.NR_ADS&&typeof window.parent.NR_ADS.getConfig==='function'){
+      raw=window.parent.NR_ADS.getConfig();
+    }
+  }catch(e){}
+  if(!raw){
+    try{
+      var saved=JSON.parse(localStorage.getItem('nr_ads_cfg_v2')||'null');
+      if(saved&&saved.value)raw=saved.value;
+    }catch(e){}
+  }
+
+  var src=(raw&&raw.bannerSrc)||DEF.src;
+  var key=(raw&&raw.bannerKey)||DEF.key;
+  var width=Math.max(50,Math.min(1200,Math.floor(Number(raw&&raw.bannerWidth)||DEF.width)));
+  var height=Math.max(50,Math.min(1200,Math.floor(Number(raw&&raw.bannerHeight)||DEF.height)));
+
+  var validUrl='';
+  try{
+    var u=new URL(String(src).trim());
+    if(u.protocol==='https:'&&u.hostname.indexOf('.')>0&&!u.username&&!u.password){
+      validUrl=u.href;
+    }
+  }catch(e){}
+
+  if(!validUrl||!/^[a-f0-9]{16,64}$/i.test(String(key||''))){
+    notify('blocked',false);
+    return;
+  }
+
+  document.documentElement.style.width=width+'px';
+  document.documentElement.style.height=height+'px';
+  document.body.style.width=width+'px';
+  document.body.style.height=height+'px';
+
+  function hasCreative(){
+    var nodes=document.body.querySelectorAll('iframe,img,a,ins,canvas');
+    if(nodes.length>0)return true;
+    var divs=document.body.querySelectorAll('div');
+    for(var i=0;i<divs.length;i++){
+      if(divs[i].offsetHeight>16||divs[i].children.length>0)return true;
+    }
+    return false;
+  }
+
+  window.__nrBannerDone=function(ok){
+    if(!ok){
+      notify('blocked',false);
+      return;
+    }
+    notify('loaded',hasCreative()?true:null);
+    setTimeout(function(){notify('loaded',hasCreative())},1000);
+    setTimeout(function(){notify('loaded',hasCreative())},3000);
+  };
+
+  window.atOptions={
+    key:String(key),
+    format:'iframe',
+    height:height,
+    width:width,
+    params:{}
+  };
+
+  var safeSrc=validUrl.replace(/[&<>"]/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+  document.write('<scr'+'ipt data-cfasync="false" src="'+safeSrc+'" onload="window.__nrBannerDone(1)" onerror="window.__nrBannerDone(0)"><\/scr'+'ipt>');
+})();
+</script>
+</body>
+</html>

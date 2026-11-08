@@ -17,7 +17,9 @@ async function loadPerson(id){
 function chkRem(){const u=me();if(!u||!u.rm)return;const t=new Date().toISOString().slice(0,10);const out=[];for(const i of Object.keys(u.rm)){const c=C[i];if(c&&c.rd&&c.rd<=t){out.push(c.t);delete u.rm[i]}}if(out.length){toast(out.length===1?out[0]+' is out now':out[0]+' and '+(out.length-1)+' more are out now','ok');save()}}
 const help=()=>{$('#au').innerHTML='<div class="au"><button class="x" data-a="cl" aria-label="Close">'+I('x')+'</button><h2>Shortcuts</h2><p><b>/</b> Focus search<br><b>?</b> This help<br><b>Esc</b> Close anything (player included)<br><b>Ctrl/Cmd K</b> Command palette<br><b>Space</b> Play or pause · <b>← →</b> Seek</p></div>';$('#au').classList.add('o')};
 const skel=n=>'<div class="card skc"></div>'.repeat(n);
-const skHome=()=>'<div class="hero hsk"><div class="nr-loading" role="status" aria-live="polite"><div><div class="nr-reel" aria-hidden="true">'+I('sparkles')+'</div><b>NIGHTREEL</b><p>Finding your next scene…</p></div></div></div><div style="margin-top:10px">'+[0,1,2].map(()=>`<section class="row"><div class="skt"></div><div class="sc">${skel(9)}</div></section>`).join('')+'</div>';
+const skHero=()=>'<div class="hero hsk"><div class="nr-loading" role="status" aria-live="polite"><div><div class="nr-reel" aria-hidden="true">'+I('sparkles')+'</div><b>NIGHTREEL</b><p>Finding your next scene…</p></div></div></div>';
+const skRows=()=>'<div style="margin-top:10px">'+[0,1,2].map(()=>`<section class="row"><div class="skt"></div><div class="sc">${skel(9)}</div></section>`).join('')+'</div>';
+const skHome=()=>skHero()+skRows();
 const DC=[['2020s',2020],['2010s',2010],['2000s',2000],['90s',1990],['80s',1980],['Older',1970]];
 const RC=[[I('star','fill')+' 7+',7],[I('star','fill')+' 8+',8],[I('star','fill')+' 9+',9]];
 function page(ty,title){
@@ -46,9 +48,9 @@ function pick(u){const w={};u.gn.forEach(g=>w[g]=(w[g]||0)+1);Object.entries(u.r
   Object.entries(u.r10||{}).forEach(([i,v])=>{const c=C[i];c&&c.g.forEach(g=>w[g]=(w[g]||0)+Math.max(1,Math.round(v/3)))});
   return C.filter(c=>!(u.rt&&u.rt[c.i])).map(c=>({c,s:c.g.reduce((a,g)=>a+(w[g]||0),0)+c.r/10})).filter(x=>x.s>=1).sort((a,b)=>b.s-a.s).slice(0,14).map(x=>x.c)}
 function render(){
-  const r=location.hash.slice(1)||'home',u=me();SEEN.clear();
+  const r=location.hash.slice(1)||'home',u=me(),ht=$('#nr-home-top');SEEN.clear();
   document.querySelectorAll('#nl a,.dp a').forEach(a=>a.classList.toggle('on',a.getAttribute('href')==='#'+r&&!q));
-  let h;
+  let h,topH='';
   if(!q&&NF(r))h=nf();else if(!q&&ST[r])h=statics(r);else if(q)h=`<div class="pg"><h1>Results for “${esc(q)}”</h1><div id="ppl"></div><div class="gr" id="gr" data-k="q">${skel(12)}</div><div id="more" style="height:40px"></div></div>`;
   else if(r==='movies')h=page('M','Movies');
   else if(r==='auth')h=authPage();
@@ -62,9 +64,12 @@ function render(){
   else if(r==='list')h=listPage(u);
   else{
     const cw=conts(),last=cw[0],rec=last?C.filter(c=>c.i!==last.i&&c.g.some(g=>last.g.includes(g))).slice(0,10):[];
-    h=(FEAT.length?hero():'<div style="height:90px"></div>')+`<div style="margin-top:10px">`+row('Continue watching',cw,{f:c=>{const p=u.prog[c.i];return{p:Math.min(100,p.t/(c.m*60)*100),s:c.mt==='movie'?'':se(c,p.ep)}}})+row('Recently viewed',(u&&u.view?u.view:[]).map(i=>C[i]).filter(Boolean).slice(0,12))+row('Picked for you',u?pick(u):[])+row('Trending this week',dd((L.trend||[]).slice(0,10)),{rank:1})+moods()+(last?row('Because you watched '+esc(last.t),rec):'')+row('In theaters now',dd(L.new))+row('Popular movies',dd(L.pm))+row('Top rated',dd(L.tm))+row('Popular series',dd(L.ps))+row('Anime',dd(L.an))+`</div>`;
+    topH=FEAT.length?hero():'<div style="height:90px"></div>';
+    h=`<div style="margin-top:10px">`+row('Continue watching',cw,{f:c=>{const p=u.prog[c.i];return{p:Math.min(100,p.t/(c.m*60)*100),s:c.mt==='movie'?'':se(c,p.ep)}}})+row('Recently viewed',(u&&u.view?u.view:[]).map(i=>C[i]).filter(Boolean).slice(0,12))+row('Picked for you',u?pick(u):[])+row('Trending this week',dd((L.trend||[]).slice(0,10)),{rank:1})+moods()+(last?row('Because you watched '+esc(last.t),rec):'')+row('In theaters now',dd(L.new))+row('Popular movies',dd(L.pm))+row('Top rated',dd(L.tm))+row('Popular series',dd(L.ps))+row('Anime',dd(L.an))+`</div>`;
   }
-  if(!LD&&r==='home'&&!q)h=skHome();else if(LD&&r==='home'&&!q&&!FEAT.length&&!C.length)h='<div class="pg"><h1>Could not load titles</h1><p class="empty">Check your internet connection or TMDB API key, then <button class="btn" data-a="retry-home">try again</button>.</p></div>';$('#app').innerHTML=h;if(r==='auth')authBind();slide(0);gridInit();if(!q){if(r==='soon')loadSoon();else if(r.startsWith('p-'))loadPerson(+r.slice(2));else if(r.startsWith('title-'))openShared(r);else if(r.startsWith('t-')){const tid=+r.slice(2);if(C[tid])detail(tid);else $('#app').innerHTML='<div class="pg"><p class="empty">This older link only works on the device where it was created. <a href="#home">Go home</a></p></div>'}}
+  if(!LD&&r==='home'&&!q){topH=skHero();h=skRows()}else if(LD&&r==='home'&&!q&&!FEAT.length&&!C.length){topH='';h='<div class="pg"><h1>Could not load titles</h1><p class="empty">Check your internet connection or TMDB API key, then <button class="btn" data-a="retry-home">try again</button>.</p></div>'}
+  if(ht)ht.innerHTML=topH;else if(topH)h=topH+h;
+  $('#app').innerHTML=h;if(r==='auth')authBind();slide(0);gridInit();if(!q){if(r==='soon')loadSoon();else if(r.startsWith('p-'))loadPerson(+r.slice(2));else if(r.startsWith('title-'))openShared(r);else if(r.startsWith('t-')){const tid=+r.slice(2);if(C[tid])detail(tid);else $('#app').innerHTML='<div class="pg"><p class="empty">This older link only works on the device where it was created. <a href="#home">Go home</a></p></div>'}}
 }
 // Stable share links use TMDB type and ID rather than a browser-local array index.
 let openingShared='';

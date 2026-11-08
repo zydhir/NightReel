@@ -15,8 +15,8 @@ Plain HTML/CSS/JS with no build step. Data from [TMDB](https://www.themoviedb.or
 `index.html` loads the styles in `css/` and the scripts in `js/` **in a fixed order**. Later files build on earlier ones, so keep that order.
 
 ## Adsterra ads
-All four Adsterra units (**Social Bar**, **Native Banner**, **160×300 Sidebar Banner**, and **Smartlink**) are pre-configured in `js/ads.js` and `index.html`:
-- **Manage live:** Open `#admin` → **Ads** to toggle the master switch or individual ad formats, adjust Smartlink behaviour/cooldown, or swap Adsterra tag URLs anytime (synced via Supabase `site_config` key `ads`).
+All four Adsterra units (**Social Bar**, **Native Banner**, **160×300 Sidebar Banner** via `ad-banner.html`, and **Smartlink**) are pre-configured in `js/ads.js` and `index.html`:
+- **Manage live:** Open `#admin` → **Ads** to toggle the master switch or individual ad formats (toggles save & sync immediately), test Adsterra connectivity & live `160×300` fill, adjust Smartlink behaviour/cooldown, or swap Adsterra tag URLs anytime.
 - **Automatic protections:** Sign-in (`#auth`), Admin (`#admin`), legal pages, and Kids profiles stay ad-free automatically.
 
 ## Embedded players

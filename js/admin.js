@@ -18,11 +18,12 @@ const _as=afterSignIn;afterSignIn=async function(){const r=await _as.apply(this,
 const _a=acct;acct=function(){_a.apply(this,arguments);if(!AUTH){NR_ADMIN=false;known=true}
   const m=$('#menu'),pl=m&&m.querySelector('a[href="#profile"]');if(NR_ADMIN&&pl&&!m.querySelector('a[href="#admin"]'))pl.insertAdjacentHTML('beforebegin','<a href="#admin">'+I('shield')+' Admin panel</a>')};
 // ---- data ----
-async function load(){if(!NR_ADMIN)return;ADM.state='loading';ADM.err='';paint();
+async function load(){if(!NR_ADMIN)return;ADM.state='loading';ADM.err='';if(ADM.tab!=='ads'&&ADM.tab!=='announce')paint();
   try{const [u,s]=await Promise.all([SB.rpc('admin_users'),SB.from('app_state').select('user_id,data,updated_at')]);
     if(u.error)throw u.error;if(s.error)throw s.error;ADM.users=u.data||[];ADM.rows=s.data||[];ADM.dg=digest();ADM.state='ok';ADM.loadedAt=Date.now()}
   catch(e){ADM.state='error';ADM.err=(e&&e.message)||'Could not load admin data'}
-  paint()}
+  const u=$('#adm-upd');if(u&&ADM.loadedAt)u.textContent='updated '+ago(ADM.loadedAt);
+  if(ADM.tab!=='ads'&&ADM.tab!=='announce')paint()}
 function digest(){const byId={},titles={},themes={},fonts={},prov={};ADM.rows.forEach(r=>byId[r.user_id]=r);
   const bump=(c,k)=>{const key=c.mt+c.tid,t=titles[key]||(titles[key]={t:c.t,p:c.p,mt:c.mt,tid:c.tid,ty:c.ty||(c.mt==='tv'?'S':'M'),g:c.g||[],saved:0,watched:0,liked:0,rs:0,rn:0});if(k)t[k]++;return t};
   const users=ADM.users.map(u=>{const r=byId[u.id],d=(r&&r.data)||{},refs=d.catalogRefs||{},pf=Array.isArray(d.pf)?d.pf:[];
@@ -119,40 +120,60 @@ function adsSideHTML(draft){
   const nat=NR_ADS.parseNativeInput(c.nativeSrc,c.nativeContainerId);
   const ban=NR_ADS.parseBannerInput(c.bannerSrc,{key:c.bannerKey,width:c.bannerWidth,height:c.bannerHeight});
   const sl=NR_ADS.parseSmartlinkInput(c.smartUrl);
-  const badge={ok:['check','Ready','good'],warn:['alert','Off','warn'],bad:['x','Problem','bad']};
-  const unitItem=(on,p,rt,extra)=>{
-    if(!on)return ['warn','Turned off'];
+  const badge={
+    active:['check','Active','good'],
+    enabled:['check','Enabled','good'],
+    off:['x','Off','muted'],
+    blocked:['alert','Blocked','warn'],
+    nofill:['alert','No fill yet','warn'],
+    paused:['alert','Paused','warn'],
+    bad:['x','Invalid','bad']
+  };
+  const unitItem=(on,p,rt,extra,altRt)=>{
+    if(!c.active)return ['paused','Master switch is paused'];
+    if(!on)return ['off','Turned off'];
     if(!p.ok)return ['bad',p.error];
     const target=p.src||p.url;
-    if(!target)return ['warn','No URL set'];
-    const s=rt&&rt.src===target?rt.state:'idle';
-    if(s==='blocked')return ['warn',p.host+' · blocked by adblocker in this browser'];
-    if(s==='loaded')return ['ok','Loaded · '+p.host+(extra?' ('+extra+')':'')];
-    return ['ok',p.host+(extra?' · '+extra:'')];
+    if(!target)return ['off','No URL set'];
+    const s=(rt&&rt.src===target&&rt.state!=='idle')?rt:(altRt&&altRt.src===target?altRt:null);
+    const state=s?s.state:'idle';
+    if(state==='blocked')return ['blocked',p.host+' · blocked by adblocker/shield in this browser'];
+    if(state==='loaded'){
+      if(s&&s.filled===false)return ['nofill',p.host+' · script connected, waiting for Adsterra ad fill on '+(location.hostname||'this domain')];
+      return ['active','Loaded from '+p.host+(extra?' · '+extra:'')];
+    }
+    return ['enabled',p.host+(extra?' · '+extra:'')];
   };
   const anyOn=(c.socialOn&&soc.ok&&!!soc.src)||(c.nativeOn&&nat.ok&&!!nat.src)||(c.bannerOn&&ban.ok&&!!ban.src)||(c.smartMode!=='off'&&sl.ok&&!!sl.url);
+  const syncLabel=st.syncMode==='ads'||st.syncMode==='announcement'?'Synced to Supabase':'Saved in this browser';
   const items=[
-    ['Master switch',c.active&&anyOn?'ok':'warn',c.active?(anyOn?'Enabled across Nightreel':'Enabled, but all formats are off'):'Paused — no ads shown to visitors'],
-    ['Social Bar',...unitItem(c.socialOn,soc,st.slots.social,'floating widget')],
-    ['Native Banner',...unitItem(c.nativeOn,nat,st.slots.native,nat.containerId)],
-    ['160×300 Banner',...unitItem(c.bannerOn,ban,st.slots.banner,'title detail sidebar')],
-    ['Smartlink',c.smartMode==='off'?['warn','Turned off']:!sl.ok?['bad',sl.error]:sl.url?['ok',sl.host+' · '+(c.smartMode==='play'?'Play click (1×/'+c.smartCapHours+'h) + link':'Partner link only')]:['warn','No URL set']]
+    ['Master switch',c.active&&anyOn?'active':c.active?'nofill':'off',c.active?(anyOn?'Enabled across Nightreel · '+syncLabel:'Enabled, but all formats are off'):'Paused — no ads shown to visitors'],
+    ['Social Bar',...unitItem(c.socialOn,soc,st.slots.social,'floating widget on browse & watch pages')],
+    ['Native Banner',...unitItem(c.nativeOn,nat,st.slots.native,'below Hero on Home & top of browse pages')],
+    ['160×300 Banner',...unitItem(c.bannerOn,ban,st.slots.banner,'title detail sidebar',st.slots.preview)],
+    ['Smartlink',!c.active?['paused','Master switch is paused']:c.smartMode==='off'?['off','Turned off']:!sl.ok?['bad',sl.error]:sl.url?['enabled',sl.host+' · '+(c.smartMode==='play'?'Play click (1×/'+c.smartCapHours+'h) + Partner link':'Partner link only')]:['off','No URL set']]
   ];
   const snip=NR_ADS.buildHtmlSnippet(c);
-  const capNote=st.lastSmartAt?`Last Smartlink tab on this browser: ${ago(st.lastSmartAt)}.`:'Smartlink has not opened a tab in this browser yet.';
-  return card('Live Adsterra status',`<div class="adm-checks">${items.map(([n,k,d])=>{const b=badge[k];return `<div class="adm-chk ${b[2]}"><span class="adm-st">${I(b[0])} ${b[1]}</span><b>${n}</b><small>${esc(d)}</small></div>`}).join('')}</div><p class="mu" style="margin:12px 0 0;font-size:12.5px">${esc(capNote)}</p><div class="rowb" style="margin-top:10px"><button class="btn" data-adm="ads-reset-cap">${I('refresh')} Reset Smartlink cooldown</button></div>`)
-    +card('Where each unit appears',`<ol class="adm-steps"><li><b>Native Banner</b> docks mid-feed on Home (right below <i>Browse by mood</i>) and above the footer on Movies, Series, Anime, Coming Soon and My List.</li><li><b>160×300 Banner</b> renders inside the right-hand info sidebar whenever a viewer opens any movie or series popup.</li><li><b>Social Bar</b> runs as Adsterra’s floating notification widget on browse and watch pages.</li><li><b>Smartlink</b> opens at most once per cooldown window when clicking <b>Play</b>, plus adds a subtle <i>Partner offer</i> link inside title details.</li></ol>${snip?`<pre class="adm-code">${esc(snip)}</pre>`:''}`,snip?`<button class="btn" data-adm="ads-copy">${I('copy')} Copy tags</button>`:'');
+  const capNote=st.lastSmartAt?`Last Smartlink tab on this browser: ${ago(st.lastSmartAt)}.`:'Smartlink ready (no cooldown active on this browser).';
+  const blkBanner=st.anyBlocked?`<div class="adm-ad-alert">${I('alert')}<div><b>Adblocker detected in your browser</b><small><code>bancadeltempoidea.org</code> was blocked by a browser shield or extension (Brave Shields, uBlock Origin, AdGuard, or DNS filter). Visitors without adblockers still see ads — pause your blocker for <b>${esc(location.hostname||'this site')}</b> and click <b>Re-test</b>.</small></div></div>`:'';
+  return card('Live Adsterra status',`${blkBanner}<div class="adm-checks">${items.map(([n,k,d])=>{const b=badge[k]||badge.off;return `<div class="adm-chk ${b[2]}"><span class="adm-st">${I(b[0])} ${b[1]}</span><b>${n}</b><small>${esc(d)}</small></div>`}).join('')}</div><p class="mu" style="margin:12px 0 0;font-size:12.5px">${esc(capNote)}</p><div class="rowb" style="margin-top:10px"><button class="btn" data-adm="ads-probe">${I('refresh')} Re-test connection</button><button class="btn" data-adm="ads-test-smart">${I('external')} Test Smartlink</button><button class="btn" data-adm="ads-reset-cap">${I('clock')} Reset cooldown</button></div>`)
+    +card('Where each unit appears',`<ol class="adm-steps"><li><b>Native Banner</b> sits right below the Hero banner on <b>Home</b> and at the top of <b>Movies, Series, Anime, Coming Soon &amp; My List</b>.</li><li><b>160×300 Banner</b> renders inside the right-hand info sidebar whenever a viewer opens any movie or series popup.</li><li><b>Social Bar</b> runs as Adsterra’s floating notification widget on browse and watch pages.</li><li><b>Smartlink</b> opens at most once per cooldown window on <b>Play</b>, plus adds a <i>Partner offer</i> link inside title details and the Sponsored bar.</li></ol>${snip?`<pre class="adm-code">${esc(snip)}</pre>`:''}`,snip?`<button class="btn" data-adm="ads-copy">${I('copy')} Copy tags</button>`:'');
+}
+function ensureAdsPreview(){
+  const host=$('#ads-live-preview');
+  if(!host||!window.NR_ADS)return;
+  NR_ADS.mountBannerPreview(host);
 }
 function vAds(){
   const c=window.NR_ADS?NR_ADS.getConfig():{};
   const smModes=[['play','On Play + link'],['button','Partner link only'],['off','Off']];
   const caps=[[4,'Every 4h'],[12,'Every 12h'],[24,'Every 24h']];
   const tg=(id,on,t,s)=>`<button class="tg ads-tg${on?' on':''}" id="${id}" type="button" aria-pressed="${!!on}"><span>${t}<small>${s}</small></span><i></i></button>`;
-  return `<div class="adm-grid">${card('Adsterra units & controls',`<p class="mu">All four of your Adsterra units are wired in. Toggle any format or update a tag below (accepts either the full Adsterra HTML snippet or the script URL).</p>
+  return `<div class="adm-grid">${card('Adsterra units & controls',`<p class="mu">Toggles apply immediately and sync across visitors. Paste a full Adsterra snippet or URL below and press <b>Save</b> when changing ad codes.</p>
 ${tg('ads-active',c.active,'Enable Adsterra ads','Master switch to turn all ad units on or off site-wide')}
 ${tg('ads-social-on',c.socialOn!==false,'Social Bar','Floating in-page notification widget')}
 <label class="adm-f">Social Bar script / URL<input id="ads-social" type="text" spellcheck="false" autocomplete="off" value="${esc(c.socialSrc||'')}"></label>
-${tg('ads-native-on',c.nativeOn!==false,'Native Banner','Responsive card row on Home and browse pages')}
+${tg('ads-native-on',c.nativeOn!==false,'Native Banner','Responsive card banner below Hero on Home & top of browse pages')}
 <label class="adm-f">Native Banner snippet / URL<textarea id="ads-native" rows="2" spellcheck="false">${esc(c.nativeSrc||'')}</textarea></label>
 ${tg('ads-banner-on',c.bannerOn!==false,'160×300 Sidebar Banner','Vertical banner inside the Title Detail sidebar')}
 <label class="adm-f">160×300 Banner snippet / URL<textarea id="ads-banner" rows="2" spellcheck="false">${esc(c.bannerSrc||'')}</textarea></label>
@@ -162,9 +183,23 @@ ${tg('ads-banner-on',c.bannerOn!==false,'160×300 Sidebar Banner','Vertical bann
 ${tg('ads-skip-admin',!!c.skipAdmin,'Skip ads for admin','Hide ads while signed in as the site owner')}
 ${tg('ads-skip-kids',c.skipKids!==false,'Skip on Kids profiles','Never show ads when a Kids profile is active')}
 ${tg('ads-skip-auth',c.skipAuth!==false,'Skip on Sign-in & Legal pages','Keep sign-in, admin and policy pages ad-free')}
-<div class="rowb"><button class="btn p" data-adm="ads-save">${I('check')} Save</button><button class="btn" data-adm="ads-copy">${I('copy')} Copy tags</button></div>`)}<div id="ads-side">${adsSideHTML(c)}</div></div>`;
+<div class="rowb"><button class="btn p" data-adm="ads-save">${I('check')} Save</button><button class="btn" data-adm="ads-copy">${I('copy')} Copy tags</button><button class="btn" data-adm="ads-defaults">${I('refresh')} Reset defaults</button></div>`)}<div id="ads-side"><div id="ads-status-cards">${adsSideHTML(c)}</div>${card('Live banner test · <code>'+esc(location.hostname||'local')+'</code>',`<p class="mu" style="margin:0 0 10px;font-size:13px">Loads your real Adsterra <code>160×300</code> unit inside this browser to verify connectivity and domain fill.</p><div id="ads-live-preview" class="adm-prev-stage"></div>`,`<button class="btn" data-adm="ads-probe">${I('refresh')} Reload</button>`)}</div></div>`;
 }
-function adsPrev(){const s=$('#ads-side');if(s)s.innerHTML=adsSideHTML(readAdsDraft())}
+function adsPrev(){const s=$('#ads-status-cards');if(s)s.innerHTML=adsSideHTML(readAdsDraft())}
+async function persistAdsDraft(showFullToast){
+  if(!window.NR_ADS)return toast('js/ads.js did not load','err');
+  const draft=readAdsDraft();
+  const res=await NR_ADS.saveConfig(draft,{ann:ADM.ann});
+  if(!res.ok){adsPrev();return toast(res.error,'err')}
+  if(res.annValue)ADM.ann=res.annValue;
+  adsPrev();
+  if(showFullToast){
+    if(res.synced)toast(res.cfg.active?'Adsterra settings saved & published':'Adsterra settings saved (ads paused)','ok');
+    else toast('Saved on this browser (run admin-setup.sql in Supabase to sync globally)','ok');
+  }else{
+    toast(res.cfg.active?'Adsterra updated':'Ads paused','ok');
+  }
+}
 function vAnnounce(){const a=ADM.ann||{},kinds=[['info','Info'],['success','Good news'],['warning','Warning']];
   return `<div class="adm-grid">${card('Site-wide announcement',`<p class="mu">Shows as a banner at the top of the site for every visitor until you turn it off. Visitors can dismiss it; a new message shows again.</p>
 <label class="adm-f">Message<textarea id="ann-text" maxlength="220" rows="3" placeholder="e.g. New: hover any poster to preview its trailer">${esc(a.text||'')}</textarea></label>
@@ -208,12 +243,13 @@ function body(){const t=ADM.tab;if(t==='ads')return vAds();if(t==='announce')ret
 // The user drawer lives at the top level of the page so the fixed nav can't sit on top of it.
 function drawer(){let r=$('#adm-drawer-root');if(!r){r=D.createElement('div');r.id='adm-drawer-root';r.className='adm';D.body.append(r)}const u=ADM.sel&&ADM.dg&&location.hash==='#admin'&&ADM.tab==='users'?ADM.dg.users.find(x=>x.id===ADM.sel):null;r.innerHTML=u?vUser(u):'';D.body.style.overflow=u?'hidden':''}
 function paint(){drawer();const b=$('#adm-body');if(!b)return;const f=D.activeElement&&D.activeElement.id==='adm-q';b.innerHTML=body();const u=$('#adm-upd');if(u&&ADM.loadedAt)u.textContent='updated '+ago(ADM.loadedAt);
+  if(ADM.tab==='ads')ensureAdsPreview();
   if(f){const i=$('#adm-q');i.focus();i.setSelectionRange(i.value.length,i.value.length)}}
 function page(){if(!AUTH)return gate('Admin','Sign in with your admin account to continue.','<button class="btn p" data-a="auth" data-m="in">Sign in</button>');
   if(!SB)return gate('Admin','The sign-in service didn’t load. Check your connection and reload.');
   if(!known)return gate('Admin','Checking access…');if(setupMissing)return setup();
   if(!NR_ADMIN)return gate('Not available','This page is only for the site owner.','<a class="btn" href="#home">Back to Home</a>');return shell()}
-const _r=render;render=function(){if(location.hash.slice(1)==='admin'&&!q){SEEN.clear();GR=null;io.disconnect();$$('#nl a,.dp a').forEach(a=>a.classList.remove('on'));
+const _r=render;render=function(){if(location.hash.slice(1)==='admin'&&!q){SEEN.clear();GR=null;io.disconnect();const ht=$('#nr-home-top');if(ht)ht.innerHTML='';$$('#nl a,.dp a').forEach(a=>a.classList.remove('on'));
     $('#app').innerHTML=page();if($('#adm-body')){paint();if(ADM.state==='idle')load();if(ADM.tab==='system'&&!ADM.checks)runChecks()}return}
   ADM.sel=null;drawer();_r.apply(this,arguments)};
 // ---- exports ----
@@ -236,17 +272,13 @@ D.addEventListener('click',async e=>{const t=e.target.closest('[data-adm]');if(!
   else if(a==='export'){if(!ADM.dg)return toast('Data is still loading','err');dl('nightreel-admin-export.json',JSON.stringify({exported:new Date().toISOString(),users:ADM.users,app_state:ADM.rows},null,1),'application/json');toast('Export downloaded','ok')}
   else if(a==='checks')runChecks();
   else if(a==='clear-cache'){let n=0;try{Object.keys(sessionStorage).filter(k=>k.startsWith('tm:')).forEach(k=>{sessionStorage.removeItem(k);n++})}catch(x){}toast('Cleared '+n+' cached responses','ok');paint()}
-  else if(a==='ads-save'){if(!window.NR_ADS)return toast('js/ads.js did not load','err');
-    const draft=readAdsDraft(),soc=NR_ADS.parseSocialInput(draft.socialSrc),nat=NR_ADS.parseNativeInput(draft.nativeSrc,draft.nativeContainerId),
-      ban=NR_ADS.parseBannerInput(draft.bannerSrc,{key:draft.bannerKey,width:draft.bannerWidth,height:draft.bannerHeight}),sl=NR_ADS.parseSmartlinkInput(draft.smartUrl);
-    if(draft.socialOn&&!soc.ok)return toast('Social Bar: '+soc.error,'err');
-    if(draft.nativeOn&&!nat.ok)return toast('Native Banner: '+nat.error,'err');
-    if(draft.bannerOn&&!ban.ok)return toast('160×300 Banner: '+ban.error,'err');
-    if(draft.smartMode!=='off'&&!sl.ok)return toast('Smartlink: '+sl.error,'err');
-    const clean=NR_ADS.normalizeConfig(draft),stamp=new Date().toISOString();
-    const {error}=await SB.from('site_config').upsert({key:'ads',value:clean,updated_at:stamp});
-    if(error)return toast(/site_config/.test(error.message)?'Run admin-setup.sql first':error.message,'err');
-    NR_ADS.setConfig(clean,stamp);paint();toast(clean.active?'Adsterra settings published':'Adsterra settings saved (ads paused)','ok')}
+  else if(a==='ads-save'){await persistAdsDraft(true);ensureAdsPreview()}
+  else if(a==='ads-defaults'){if(!window.NR_ADS)return;if(!confirm('Restore Nightreel’s default Adsterra tags and turn all four formats on?'))return;
+    const res=await NR_ADS.saveConfig(NR_ADS.DEFAULTS,{ann:ADM.ann});if(res.annValue)ADM.ann=res.annValue;paint();toast('Default Adsterra units restored','ok')}
+  else if(a==='ads-probe'){if(!window.NR_ADS)return;NR_ADS.probe();ensureAdsPreview();adsPrev();toast('Re-testing Adsterra connection…','ok')}
+  else if(a==='ads-test-smart'){if(!window.NR_ADS)return;const sl=NR_ADS.parseSmartlinkInput(readAdsDraft().smartUrl);
+    if(!sl.ok||!sl.url)return toast(sl.error||'Enter a Smartlink URL first','err');
+    window.open(sl.url,'_blank','noopener,noreferrer');toast('Opened Smartlink in a new tab','ok')}
   else if(a==='ads-copy'){if(!window.NR_ADS)return;const snip=NR_ADS.buildHtmlSnippet(readAdsDraft());
     if(!snip)return toast('Enable at least one ad unit first','err');
     if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(snip).then(()=>toast('Adsterra tags copied','ok'),()=>toast('Could not copy automatically','err'));
@@ -254,12 +286,13 @@ D.addEventListener('click',async e=>{const t=e.target.closest('[data-adm]');if(!
   else if(a==='ads-reset-cap'){if(!window.NR_ADS)return;NR_ADS.resetSmartlinkCap();adsPrev();toast('Smartlink cooldown reset on this browser','ok')}
   else if(a==='ann-save'){const text=$('#ann-text').value.trim(),link=$('#ann-link').value.trim(),kind=($('#ann-kind .on')||{}).dataset?.k||'info',active=$('#ann-active').classList.contains('on');
     if(active&&!text)return toast('Write a message first','err');if(link&&!safeLink(link))return toast('The link must start with https:// or #','err');
-    const {error}=await SB.from('site_config').upsert({key:'announcement',value:{text,link,kind,active},updated_at:new Date().toISOString()});
-    if(error)return toast(/site_config/.test(error.message)?'Run admin-setup.sql first':error.message,'err');ADM.ann={text,link,kind,active};toast(active?'Announcement published':'Announcement saved (hidden)','ok');store.set('nr_ann_x','');loadAnn()}});
+    const annVal={...(ADM.ann&&ADM.ann.ads?{ads:ADM.ann.ads,ads_updated_at:ADM.ann.ads_updated_at}:{}),text,link,kind,active};
+    const {error}=await SB.from('site_config').upsert({key:'announcement',value:annVal,updated_at:new Date().toISOString()});
+    if(error)return toast(/site_config/.test(error.message)?'Run admin-setup.sql first':error.message,'err');ADM.ann=annVal;toast(active?'Announcement published':'Announcement saved (hidden)','ok');store.set('nr_ann_x','');loadAnn()}});
 D.addEventListener('click',e=>{const k=e.target.closest('#ann-kind [data-k]');if(k){$$('#ann-kind button').forEach(b=>b.classList.toggle('on',b===k));annPrev()}
-  const sm=e.target.closest('#ads-smart-mode [data-k]');if(sm){$$('#ads-smart-mode button').forEach(b=>b.classList.toggle('on',b===sm));adsPrev()}
-  const sc=e.target.closest('#ads-smart-cap [data-k]');if(sc){$$('#ads-smart-cap button').forEach(b=>b.classList.toggle('on',b===sc));adsPrev()}
-  const t=e.target.closest('#ann-active,.ads-tg');if(t){t.classList.toggle('on');t.setAttribute('aria-pressed',t.classList.contains('on'));if(t.classList.contains('ads-tg'))adsPrev()}});
+  const sm=e.target.closest('#ads-smart-mode [data-k]');if(sm){$$('#ads-smart-mode button').forEach(b=>b.classList.toggle('on',b===sm));persistAdsDraft(false)}
+  const sc=e.target.closest('#ads-smart-cap [data-k]');if(sc){$$('#ads-smart-cap button').forEach(b=>b.classList.toggle('on',b===sc));persistAdsDraft(false)}
+  const t=e.target.closest('#ann-active,.ads-tg');if(t){t.classList.toggle('on');t.setAttribute('aria-pressed',t.classList.contains('on'));if(t.classList.contains('ads-tg'))persistAdsDraft(false)}});
 function annPrev(){const p=$('.ann-prev');if(p)p.innerHTML=annHTML({text:$('#ann-text').value||'Your message will appear here.',kind:($('#ann-kind .on')||{}).dataset?.k||'info',link:$('#ann-link').value},true)}
 D.addEventListener('input',e=>{if(e.target.id==='adm-q'){ADM.q=e.target.value;paint()}else if(e.target.id==='ann-text'||e.target.id==='ann-link')annPrev();else if(/^ads-(social|native|banner|smart)$/.test(e.target.id||''))adsPrev()});
 D.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches&&e.target.matches('tr[data-adm="user"]'))e.target.click();if(e.key==='Escape'&&ADM.sel){ADM.sel=null;paint()}});
