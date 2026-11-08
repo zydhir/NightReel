@@ -16,7 +16,9 @@ Plain HTML/CSS/JS with no build step. Data from [TMDB](https://www.themoviedb.or
 
 ## Adsterra ads
 All four Adsterra units (**Social Bar**, **Native Banner**, **160×300 Sidebar Banner** via `ad-banner.html`, and **Smartlink**) are pre-configured in `js/ads.js` and `index.html`:
-- **Manage live:** Open `#admin` → **Ads** to toggle the master switch or individual ad formats (toggles save & sync immediately), test Adsterra connectivity & live `160×300` fill, adjust Smartlink behaviour/cooldown, or swap Adsterra tag URLs anytime.
+- **Changes for everyone (`#admin` → Ads / Announcement):** Site-wide switches (Master switch, Social Bar, Native Banner, `160×300` Banner, Smartlink mode/cap, Guests-only, Kids/Auth protections, and Site-wide Announcement) sync through Supabase `site_config` (`announcement` + `ads` with Realtime & tab-focus sync) so every visitor sees updates immediately.
+- **Ad-free accounts (`#admin` → Ads → Ad-free accounts & Users):** Add any email address (or toggle directly from a user row in `#admin` → **Users**) so that account receives **zero ads** on every device.
+- **Only affects you (`Your browser & admin controls`):** Pause ads on your own browser only, skip ads when signed into your admin account, or reset your local Smartlink cooldown without changing anything for visitors.
 - **Automatic protections:** Sign-in (`#auth`), Admin (`#admin`), legal pages, and Kids profiles stay ad-free automatically.
 
 ## Embedded players

@@ -310,5 +310,110 @@ function makeEl(tag,id=''){
   ADS.probe();
   assert.equal(ADS.status().slots.native.state,'loading');
 
-  console.log('Adsterra integration & admin tests passed');
+  // 9. Ad-free email list: chosen email gets ZERO ads everywhere, other users still get ads
+  const badVip=await ADS.addAdFreeEmail('not-an-email');
+  assert.equal(badVip.ok,false);
+
+  const addVip=await ADS.addAdFreeEmail('Friend@Example.com, second@test.org');
+  assert.equal(addVip.ok,true);
+  assert.deepEqual([...ADS.getConfig().adFreeEmails],['friend@example.com','second@test.org']);
+  assert.equal(ADS.isAdFreeEmail('FRIEND@example.com'),true);
+  assert.equal(ADS.isAdFreeEmail('stranger@example.com'),false);
+
+  // Sign in as friend@example.com -> ALL ads immediately pause across all 4 formats
+  ctx.AUTH={user:{id:'u1',email:'Friend@Example.com'},email:'Friend@Example.com'};
+  ADS.evaluate();
+  assert.equal(ADS.status().gate.ok,false);
+  assert.equal(ADS.status().gate.code,'vip');
+  assert.equal(ADS.status().userIsAdFree,true);
+  assert.equal(nativeSec.hidden,true,'Native Banner hidden for ad-free email');
+  assert.equal(body.classList.contains('nr-ads-paused'),true,'Social Bar paused for ad-free email');
+  assert.equal(bannerBox.hidden,true,'Open 160x300 detail banner hidden immediately');
+  ADS.resetSmartlinkCap();
+  assert.equal(ADS.triggerPlaySmartlink(false),false,'Smartlink blocked for ad-free email');
+  assert.equal(nativeSlink.hidden,true,'Partner Smartlink hidden for ad-free email');
+  const freshAside=makeEl('aside');
+  freshAside._linksBox=makeEl('div');
+  ADS.mountDetailAds(freshAside);
+  assert.equal(freshAside.querySelector('.nr-ad-160'),null,'No 160x300 banner mounted for ad-free email');
+  assert.equal(freshAside._linksBox._inserted||'', '','No Partner offer link mounted for ad-free email');
+
+  // Sign in as another user -> ads show normally!
+  ctx.AUTH={user:{id:'u2',email:'visitor@example.com'},email:'visitor@example.com'};
+  ADS.evaluate();
+  assert.equal(ADS.status().gate.ok,true,'Non-listed email sees ads normally');
+  assert.equal(nativeSec.hidden,false);
+
+  // Remove email from ad-free list -> friend@example.com sees ads again
+  ctx.AUTH={user:{id:'u1',email:'friend@example.com'},email:'friend@example.com'};
+  ADS.evaluate();
+  assert.equal(ADS.status().gate.code,'vip');
+  const rmVip=await ADS.removeAdFreeEmail('FRIEND@EXAMPLE.COM');
+  assert.equal(rmVip.ok,true);
+  assert.equal(ADS.isAdFreeEmail('friend@example.com'),false);
+  assert.equal(ADS.status().gate.ok,true,'Ads restored once removed from ad-free list');
+
+  // Cold-boot localStorage sb-*-auth-token prevents ad flash before AUTH finishes booting
+  await ADS.addAdFreeEmail('vipboot@example.com');
+  ctx.AUTH=null;
+  const rawLs={'sb-pgvtdnpblfiaptsjtixr-auth-token':JSON.stringify({user:{email:'vipboot@example.com'}})};
+  win.localStorage={
+    length:1,
+    key:i=>Object.keys(rawLs)[i]||null,
+    getItem:k=>rawLs[k]||null
+  };
+  ADS.evaluate();
+  assert.equal(ADS.status().gate.code,'vip','Cold-boot Supabase token detected synchronously');
+  delete win.localStorage;
+
+  // 10. Guests-only switch (skipUsers): signed-in accounts get 0 ads, logged-out guests get ads
+  ctx.AUTH={user:{id:'u2',email:'member@example.com'},email:'member@example.com'};
+  await ADS.saveConfig({...ADS.getConfig(),skipUsers:true});
+  assert.equal(ADS.status().gate.code,'signed_in');
+  ctx.AUTH={user:null,email:''};
+  ADS.evaluate();
+  assert.equal(ADS.status().gate.ok,true,'Logged-out guest still sees ads');
+  await ADS.saveConfig({...ADS.getConfig(),skipUsers:false});
+
+  // 11. Local-only browser pause ("Only affects you") never alters global active config
+  assert.equal(ADS.getDevicePause(),false);
+  ADS.setDevicePause(true);
+  assert.equal(ADS.getDevicePause(),true);
+  assert.equal(ADS.status().gate.code,'device');
+  assert.equal(ADS.getConfig().active,true,'Global config remains active for visitors');
+  assert.equal(sbRows.announcement.value.ads.active,true,'Supabase config remains active for visitors');
+  ADS.setDevicePause(false);
+  assert.equal(ADS.status().gate.ok,true);
+
+  // 12. Global visitor sync: when RLS allows admin upsert on key='ads' AND hides key='ads' from public SELECT,
+  //     saveConfig() STILL mirrors into key='announcement' so every visitor receives live changes even with clock skew!
+  let adminAdsRowSaved=false;
+  SB.from=()=>({
+    select:()=>({
+      in:()=>Promise.resolve({
+        // Public visitor RLS: only 'announcement' row is visible to anon visitors!
+        data:[{key:'announcement',...sbRows.announcement}],
+        error:null
+      }),
+      eq:()=>({maybeSingle:()=>Promise.resolve({data:sbRows.announcement,error:null})})
+    }),
+    upsert:(row)=>{
+      if(row.key==='ads'){adminAdsRowSaved=true;sbRows.ads={value:row.value,updated_at:row.updated_at};return Promise.resolve({error:null})}
+      sbRows[row.key]={value:row.value,updated_at:row.updated_at};
+      return Promise.resolve({error:null});
+    }
+  });
+  const globalSave=await ADS.saveConfig({...ADS.getConfig(),active:false,adFreeEmails:['chosen@example.com']});
+  assert.equal(globalSave.ok,true);
+  assert.equal(adminAdsRowSaved,true,'Saved to key=ads');
+  assert.equal(sbRows.announcement.value.ads.active,false,'Also mirrored to public key=announcement for visitors');
+  assert.deepEqual(sbRows.announcement.value.ads.adFreeEmails,['chosen@example.com']);
+
+  // Simulate visitor with future-skewed local clock syncing from Supabase
+  store.set('nr_ads_cfg_v2',{...ADS.DEFAULTS,active:true,updatedAt:'2099-01-01T00:00:00.000Z'});
+  await ADS.loadRemote();
+  assert.equal(ADS.getConfig().active,false,'Visitor applied global pause despite clock skew');
+  assert.deepEqual([...ADS.getConfig().adFreeEmails],['chosen@example.com'],'Visitor synced ad-free email list');
+
+  console.log('Adsterra integration, global sync & ad-free email tests passed');
 })().catch(err=>{console.error(err);process.exitCode=1});
